@@ -1,84 +1,82 @@
-import requests
+menj requests
 import random
 import time
-import threading
+import os
 from colorama import Fore
 
-# Fungsi untuk mengirim pesan dan menghapus pesan
-def kirim_dan_hapus_pesan(channel_id, token, pesan_list, waktu_hapus, waktu_kirim):
-    headers = {'Authorization': token}
+print("   ____          ____       _                    ")
+print("  | __ )  __ _  |  _ \ __ _| |_ ___ _ __   __ _  ")
+print("  |  _ \ / _' | | |_) / _' | __/ _ \ '_ \ / _' | ")
+print("  | |_) | (_| | |  __/ (_| | ||  __/ | | | (_| | ")
+print("  |____/ \__, | |_|   \__,_|\__\___|_| |_|\__, | ")
+print("         |___/                            |___/  \n")
+print("=================================================")
+author = "Bg.Pateng"
+print("Author: " + author)
+script = "Push Rank Discord"
+print("Script: " + script)
+telegram = "@bangpateng_group"
+print("Telegram: " + telegram)
+youtube = "Bang Pateng"
+print("Youtube: " + youtube)
+print("===========================================")
+print('PERINGATAN : TIDAK UNTUK DI PERJUAL-BELIKAN')
+print("===========================================\n")
 
-    while True:
-        try:
-            # Kirim pesan
-            payload = {'content': random.choice(pesan_list)}
-            start_post = time.time()
-            send_response = requests.post(f"https://discord.com/api/v9/channels/{channel_id}/messages", data=payload, headers=headers)
-            end_post = time.time()
+time.sleep(0.1)
 
-            if send_response.status_code == 200:
-                print(Fore.GREEN + f"Pesan dikirim: {payload['content']}")
-            else:
-                print(Fore.RED + f"Gagal mengirim pesan: {send_response.status_code}")
-                break
+channel_id = input("Masukkan ID channel: ")
+waktu1 = int(input("Set Waktu Hapus Pesan: "))
+waktu2 = int(input("Set Waktu Kirim Pesan: "))
 
-            # Tunggu waktu penghapusan dengan manual input
-            time.sleep(waktu_hapus)
+time.sleep(0.1)
+print("3")
+time.sleep(0.1)
+print("2")
+time.sleep(0.1)
+print("1")
+time.sleep(0.1)
 
-            # Ambil pesan dan hapus
-            start_get = time.time()
-            response = requests.get(f'https://discord.com/api/v9/channels/{channel_id}/messages', headers=headers)
-            end_get = time.time()
+os.system('cls' if os.name == 'nt' else 'clear')
 
-            if response.status_code == 200:
-                messages = response.json()
-                if messages:
-                    message_id = messages[0]['id']
-                    start_delete = time.time()
-                    delete_response = requests.delete(f"https://discord.com/api/v9/channels/{channel_id}/messages/{message_id}", headers=headers)
-                    end_delete = time.time()
-
-                    if delete_response.status_code == 204:
-                        print(Fore.GREEN + f"Pesan dengan ID {message_id} berhasil dihapus.")
-                    else:
-                        print(Fore.RED + f"Gagal menghapus pesan: {delete_response.status_code}")
-                else:
-                    print(Fore.YELLOW + "Tidak ada pesan untuk dihapus.")
-            else:
-                print(Fore.RED + f"Gagal mendapatkan pesan: {response.status_code}")
-
-            print(f"Waktu GET: {end_get - start_get:.4f} detik")
-            print(f"Waktu DELETE: {end_delete - start_delete:.4f} detik")
-
-        except Exception as e:
-            print(Fore.RED + f"Terjadi error: {str(e)}")
-            break
-
-        # Tunggu waktu pengiriman manual sesuai input
-        time.sleep(waktu_kirim)
-
-# Baca file pesan
 with open("pesan.txt", "r") as f:
-    pesan_list = [line.strip() for line in f.readlines()]
+    words = f.readlines()
 
-# Baca file token
 with open("token.txt", "r") as f:
-    tokens = [line.strip() for line in f.readlines()]
+    authorization = f.readline().strip()
 
-# Input channel ID
-channel_id = input("Masukkan ID channel: ").strip()
+while True:
+        channel_id = channel_id.strip()
 
-# Input manual waktu tunggu
-waktu_hapus = float(input("Masukkan waktu tunggu penghapusan pesan (0.01 detik): "))
-waktu_kirim = float(input("Masukkan waktu tunggu pengiriman pesan berikutnya (0.01 detik): "))
+        payload = {
+            'content': random.choice(words).strip()
+        }
 
-# Mulai thread untuk setiap token
-threads = []
-for token in tokens:
-    t = threading.Thread(target=kirim_dan_hapus_pesan, args=(channel_id, token, pesan_list, waktu_hapus, waktu_kirim))
-    t.start()
-    threads.append(t)
+        headers = {
+            'Authorization': authorization
+        }
 
-# Tunggu semua thread selesai
-for t in threads:
-    t.join()
+        r = requests.post(f"https://discord.com/api/v9/channels/{channel_id}/messages", data=payload, headers=headers)
+        print(Fore.WHITE + "Sent message: ")
+        print(Fore.YELLOW + payload['content'])
+
+        response = requests.get(f'https://discord.com/api/v9/channels/{channel_id}/messages', headers=headers)
+
+        if response.status_code == 200:
+            messages = response.json()
+            if len(messages) == 0:
+                is_running = False
+                break
+            else:
+                time.sleep(waktu1)
+
+                message_id = messages[0]['id']
+                response = requests.delete(f'https://discord.com/api/v9/channels/{channel_id}/messages/{message_id}', headers=headers)
+                if response.status_code == 204:
+                    print(Fore.GREEN + f'Pesan dengan ID {message_id} berhasil dihapus')
+                else:
+                    print(Fore.RED + f'Gagal menghapus pesan dengan ID {message_id}: {response.status_code}')
+        else:
+            print(f'Gagal mendapatkan pesan di channel: {response.status_code}')
+
+        time.sleep(waktu2)
