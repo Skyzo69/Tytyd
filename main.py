@@ -5,7 +5,7 @@ from colorama import Fore
 
 # Input channel dan waktu delay
 channel_id = input("Masukkan ID channel: ").strip()
-waktu_hapus = float(input("Set Waktu Hapus Pesan (minimal 0.01 detik): "))
+waktu_hapus = float(input("Set Waktu Hapus Pesan (minimal 0.001 detik): "))
 waktu_kirim = float(input("Set Waktu Kirim Pesan (minimal 0.1 detik): "))
 
 # Baca file pesan
