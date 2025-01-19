@@ -22,8 +22,8 @@ def kirim_dan_hapus_pesan(channel_id, token, pesan_list, waktu_hapus, waktu_kiri
                 print(Fore.RED + f"Gagal mengirim pesan: {send_response.status_code}")
                 break
 
-            # Menghapus pesan setelah 0.01 detik
-            time.sleep(waktu_hapus)  # 0.01 detik tunggu penghapusan
+            # Tunggu waktu penghapusan dengan manual input
+            time.sleep(waktu_hapus)
 
             # Ambil pesan dan hapus
             start_get = time.time()
@@ -54,7 +54,7 @@ def kirim_dan_hapus_pesan(channel_id, token, pesan_list, waktu_hapus, waktu_kiri
             print(Fore.RED + f"Terjadi error: {str(e)}")
             break
 
-        # Tunggu waktu kirim
+        # Tunggu waktu pengiriman manual sesuai input
         time.sleep(waktu_kirim)
 
 # Baca file pesan
@@ -65,12 +65,12 @@ with open("pesan.txt", "r") as f:
 with open("token.txt", "r") as f:
     tokens = [line.strip() for line in f.readlines()]
 
-# Input channel
+# Input channel ID
 channel_id = input("Masukkan ID channel: ").strip()
 
-# Input waktu manual (0.01 detik)
-waktu_hapus = 0.01  # Setel manual kecepatan penghapusan
-waktu_kirim = 0.01   # Setel manual kecepatan pengiriman berikutnya
+# Input manual waktu tunggu
+waktu_hapus = float(input("Masukkan waktu tunggu penghapusan pesan (0.01 detik): "))
+waktu_kirim = float(input("Masukkan waktu tunggu pengiriman pesan berikutnya (0.01 detik): "))
 
 # Mulai thread untuk setiap token
 threads = []
