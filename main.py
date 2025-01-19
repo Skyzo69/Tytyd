@@ -1,74 +1,77 @@
 import requests
-import random
 import time
+import os
 from colorama import Fore
 
-# Input channel dan waktu delay
+print("   ____          ____       _                    ")
+print("  | __ )  __ _  |  _ \ __ _| |_ ___ _ __   __ _  ")
+print("  |  _ \ / _' | | |_) / _' | __/ _ \ '_ \ / _' | ")
+print("  | |_) | (_| | |  __/ (_| | ||  __/ | | | (_| | ")
+print("  |____/ \__, | |_|   \__,_|\__\___|_| |_|\__, | ")
+print("         |___/                            |___/  \n")
+print("=================================================")
+print("Author: Bg.Pateng")
+print("Script: Multi-Token Push Rank Discord")
+print("===========================================")
+print('PERINGATAN : TIDAK UNTUK DI PERJUAL-BELIKAN')
+print("===========================================\n")
+
+time.sleep(1)
+
 channel_id = input("Masukkan ID channel: ").strip()
-waktu_hapus = float(input("Set Waktu Hapus Pesan (minimal 0.1 detik): "))
-waktu_kirim = float(input("Set Waktu Kirim Pesan (minimal 0.1 detik): "))
+waktu1 = float(input("Set Waktu Hapus Pesan (dalam detik): "))
+waktu2 = float(input("Set Waktu Kirim Pesan (dalam detik): "))
 
-# Baca file pesan
-try:
-    with open("pesan.txt", "r") as f:
-        pesan_list = [line.strip() for line in f.readlines()]
-except FileNotFoundError:
-    print(Fore.RED + "Error: File 'pesan.txt' tidak ditemukan.")
-    exit()
+time.sleep(1)
+print("3")
+time.sleep(1)
+print("2")
+time.sleep(1)
+print("1")
+time.sleep(1)
 
-# Baca file token
-try:
-    with open("token.txt", "r") as f:
-        tokens = [line.strip() for line in f.readlines()]
-except FileNotFoundError:
-    print(Fore.RED + "Error: File 'token.txt' tidak ditemukan.")
-    exit()
+os.system('cls' if os.name == 'nt' else 'clear')
 
-if not tokens:
-    print(Fore.RED + "Error: Tidak ada token di file 'token.txt'.")
-    exit()
+# Baca pesan
+with open("pesan.txt", "r") as f:
+    words = [line.strip() for line in f.readlines()]
 
-# Mulai loop
-index_token = 0  # Untuk penggunaan token secara bergantian
+# Baca token
+with open("token.txt", "r") as f:
+    tokens = [line.strip() for line in f.readlines()]
+
+index_message = 0  # Indeks pesan
+index_token = 0    # Indeks token
+
 while True:
-    # Pilih token secara bergantian
+    # Ambil token berdasarkan indeks
     authorization = tokens[index_token]
-    headers = {'Authorization': authorization}
 
-    # Kirim pesan
-    payload = {'content': random.choice(pesan_list)}
-    send_response = requests.post(f"https://discord.com/api/v9/channels/{channel_id}/messages", data=payload, headers=headers)
+    # Ambil pesan berdasarkan indeks
+    payload = {
+        'content': words[index_message]
+    }
 
-    if send_response.status_code == 200:
-        print(Fore.GREEN + f"Pesan dikirim: {payload['content']}")
+    headers = {
+        'Authorization': authorization
+    }
+
+    # Kirim pesan ke Discord
+    r = requests.post(f"https://discord.com/api/v9/channels/{channel_id}/messages", data=payload, headers=headers)
+    if r.status_code == 200:
+        print(Fore.GREEN + f"Token {index_token + 1} sent message: {payload['content']}")
     else:
-        print(Fore.RED + f"Gagal mengirim pesan: {send_response.status_code}, {send_response.text}")
-        break
+        print(Fore.RED + f"Token {index_token + 1} failed to send message: {r.status_code}")
 
-    # Tunggu sebelum menghapus pesan
-    time.sleep(waktu_hapus)
+    # Update indeks pesan
+    index_message += 1
+    if index_message >= len(words):  # Reset ke awal jika semua pesan sudah dikirim
+        index_message = 0
 
-    # Ambil pesan terbaru
-    get_response = requests.get(f"https://discord.com/api/v9/channels/{channel_id}/messages", headers=headers)
-    if get_response.status_code == 200:
-        messages = get_response.json()
-        if messages:
-            # Hapus pesan terbaru
-            message_id = messages[0]['id']
-            delete_response = requests.delete(f"https://discord.com/api/v9/channels/{channel_id}/messages/{message_id}", headers=headers)
-            if delete_response.status_code == 204:
-                print(Fore.GREEN + f"Pesan dengan ID {message_id} berhasil dihapus.")
-            else:
-                print(Fore.RED + f"Gagal menghapus pesan dengan ID {message_id}: {delete_response.status_code}, {delete_response.text}")
-        else:
-            print(Fore.YELLOW + "Tidak ada pesan untuk dihapus.")
-    else:
-        print(Fore.RED + f"Gagal mendapatkan pesan: {get_response.status_code}, {get_response.text}")
-
-    # Tunggu sebelum mengirim pesan berikutnya
-    time.sleep(waktu_kirim)
-
-    # Perbarui token untuk iterasi berikutnya
+    # Update indeks token
     index_token += 1
-    if index_token >= len(tokens):
+    if index_token >= len(tokens):  # Reset ke awal jika semua token sudah digunakan
         index_token = 0
+
+    # Delay untuk menghindari spam
+    time.sleep(waktu2)
