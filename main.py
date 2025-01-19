@@ -26,16 +26,16 @@ print("===========================================\n")
 time.sleep(1)
 
 channel_id = input("Masukkan ID channel: ")
-waktu_hapus = float(input("Set Waktu Hapus Pesan (detik, contoh: 0.1): "))
-waktu_kirim = float(input("Set Waktu Kirim Pesan (detik, contoh: 0.1): "))
+waktu_hapus = float(input("Set Waktu Hapus Pesan (detik, contoh: 0.01): "))
+waktu_kirim = float(input("Set Waktu Kirim Pesan (detik, contoh: 0.01): "))
 
-time.sleep(0.1)
+time.sleep(0.01)
 print("3")
-time.sleep(0.1)
+time.sleep(0.01)
 print("2")
-time.sleep(0.1)
+time.sleep(0.01)
 print("1")
-time.sleep(0.1)
+time.sleep(0.01)
 
 os.system('cls' if os.name == 'nt' else 'clear')
 
