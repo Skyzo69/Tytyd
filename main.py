@@ -19,8 +19,8 @@ print("===========================================\n")
 time.sleep(1)
 
 channel_id = input("Masukkan ID channel: ").strip()
-waktu1 = float(input("Set Waktu Hapus Pesan (dalam detik): "))
-waktu2 = float(input("Set Waktu Kirim Pesan (dalam detik): "))
+waktu1 = float(input("Set Waktu Hapus Pesan (contoh: 0.1 detik): "))
+waktu2 = float(input("Set Waktu Kirim Pesan (contoh: 0.1 detik): "))
 
 time.sleep(1)
 print("3")
