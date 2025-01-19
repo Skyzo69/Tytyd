@@ -16,11 +16,15 @@ print("===========================================")
 print('PERINGATAN : TIDAK UNTUK DI PERJUAL-BELIKAN')
 print("===========================================\n")
 
-time.sleep(1)
-
 channel_id = input("Masukkan ID channel: ").strip()
-waktu1 = 0.1  # Waktu hapus pesan (0.1 detik)
-waktu2 = 0.1  # Waktu kirim pesan (0.1 detik)
+
+# Pengaturan waktu manual
+while True:
+    waktu1 = float(input("Set Waktu Hapus Pesan (minimal 0.1 detik): "))
+    waktu2 = float(input("Set Waktu Kirim Pesan (minimal 0.1 detik): "))
+    if waktu1 >= 0.1 and waktu2 >= 0.1:
+        break
+    print("Waktu tidak valid! Masukkan nilai >= 0.1 detik.")
 
 time.sleep(1)
 print("3")
@@ -73,5 +77,6 @@ while True:
     if index_token >= len(tokens):  # Reset ke awal jika semua token sudah digunakan
         index_token = 0
 
-    # Delay untuk menghindari spam
+    # Delay untuk penghapusan dan pengiriman pesan
+    time.sleep(waktu1)
     time.sleep(waktu2)
