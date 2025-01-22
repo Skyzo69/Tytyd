@@ -1,9 +1,8 @@
 import requests
 import random
 import time
-import threading
-from concurrent.futures import ThreadPoolExecutor
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from colorama import Fore, Style
 
 # Konfigurasi logging ke file
@@ -22,30 +21,37 @@ def log_message(level, message):
         logging.error(message)
         print(Fore.RED + message + Style.RESET_ALL)
 
-def kirim_pesan(channel_id, token, pesan_list, waktu_hapus, waktu_kirim):
-    """Mengirim dan menghapus pesan pada channel tertentu menggunakan token."""
+def kirim_pesan(channel_id, token, pesan_list, sticker_list, waktu_hapus, waktu_kirim):
+    """Mengirim dan menghapus pesan atau sticker pada channel tertentu menggunakan token."""
     headers = {'Authorization': token}
     max_retries = 5  # Jumlah percobaan maksimum untuk penghapusan
     while True:
         try:
-            # Kirim pesan
-            payload = {'content': random.choice(pesan_list)}
-            send_response = requests.post(f"https://discord.com/api/v9/channels/{channel_id}/messages", data=payload, headers=headers)
-
-            if send_response.status_code == 200:
-                log_message("info", f"Pesan dikirim: {payload['content']}")
-            elif send_response.status_code == 429:
-                retry_after = float(send_response.json().get("retry_after", 1))
-                log_message("warning", f"Rate limit terkena. Tunggu selama {retry_after:.2f} detik.")
-                time.sleep(retry_after)
-                continue
+            # Pilih secara acak apakah mengirim pesan teks atau sticker
+            if random.choice([True, False]) and sticker_list:
+                # Kirim sticker
+                sticker_id = random.choice(sticker_list)
+                payload = {"sticker_ids": [sticker_id]}
+                send_response = requests.post(f"https://discord.com/api/v9/channels/{channel_id}/messages",
+                                              json=payload, headers=headers)
+                if send_response.status_code == 200:
+                    log_message("info", f"Sticker dikirim dengan ID: {sticker_id}")
+                else:
+                    log_message("error", f"Gagal mengirim sticker: {send_response.status_code}, {send_response.text}")
             else:
-                log_message("error", f"Gagal mengirim pesan: {send_response.status_code}, {send_response.text}")
-                break
-
+                # Kirim pesan teks
+                payload = {'content': random.choice(pesan_list)}
+                send_response = requests.post(f"https://discord.com/api/v9/channels/{channel_id}/messages",
+                                              data=payload, headers=headers)
+                if send_response.status_code == 200:
+                    log_message("info", f"Pesan dikirim: {payload['content']}")
+                else:
+                    log_message("error", f"Gagal mengirim pesan: {send_response.status_code}, {send_response.text}")
+            
+            # Tunggu sebelum menghapus pesan
             time.sleep(waktu_hapus)
 
-            # Ambil dan hapus pesan
+            # Ambil dan hapus pesan terakhir
             get_response = requests.get(f"https://discord.com/api/v9/channels/{channel_id}/messages", headers=headers)
             if get_response.status_code == 200:
                 messages = get_response.json()
@@ -71,6 +77,7 @@ def kirim_pesan(channel_id, token, pesan_list, waktu_hapus, waktu_kirim):
             else:
                 log_message("error", f"Gagal mendapatkan pesan: {get_response.status_code}, {get_response.text}")
 
+            # Tunggu sebelum mengirim pesan berikutnya
             time.sleep(waktu_kirim)
         except requests.exceptions.RequestException as e:
             log_message("error", f"Request error: {e}")
@@ -84,6 +91,16 @@ try:
         pesan_list = [line.strip() for line in f.readlines()]
     if not pesan_list:
         raise ValueError("File pesan kosong.")
+
+    # Baca file sticker
+    try:
+        with open("sticker.txt", "r") as f:
+            sticker_list = [line.strip() for line in f.readlines() if line.strip().isdigit()]
+        if not sticker_list:
+            log_message("warning", "File sticker kosong. Hanya pesan teks yang akan dikirim.")
+    except FileNotFoundError:
+        sticker_list = []
+        log_message("warning", "File sticker.txt tidak ditemukan. Hanya pesan teks yang akan dikirim.")
 
     # Baca file token
     with open("token.txt", "r") as f:
@@ -109,6 +126,6 @@ except Exception as e:
 log_message("info", "Memulai pengiriman pesan...")
 with ThreadPoolExecutor(max_workers=5) as executor:
     for token in tokens:
-        executor.submit(kirim_pesan, channel_id, token, pesan_list, waktu_hapus, waktu_kirim)
+        executor.submit(kirim_pesan, channel_id, token, pesan_list, sticker_list, waktu_hapus, waktu_kirim)
 
 log_message("info", "Selesai.")
