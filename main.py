@@ -7,7 +7,7 @@ import logging
 from colorama import Fore, Style
 
 # Konfigurasi logging ke file
-logging.basicConfig(filename="activity.log", level=logging.INFO, 
+logging.basicConfig(filename="activity.log", level=logging.INFO,
                     format="%(asctime)s - %(levelname)s - %(message)s")
 
 def log_message(level, message):
@@ -25,6 +25,7 @@ def log_message(level, message):
 def kirim_pesan(channel_id, token, pesan_list, waktu_hapus, waktu_kirim):
     """Mengirim dan menghapus pesan pada channel tertentu menggunakan token."""
     headers = {'Authorization': token}
+    max_retries = 5  # Jumlah percobaan maksimum untuk penghapusan
     while True:
         try:
             # Kirim pesan
@@ -50,11 +51,18 @@ def kirim_pesan(channel_id, token, pesan_list, waktu_hapus, waktu_kirim):
                 messages = get_response.json()
                 if messages:
                     message_id = messages[0]['id']
-                    delete_response = requests.delete(f"https://discord.com/api/v9/channels/{channel_id}/messages/{message_id}", headers=headers)
-                    if delete_response.status_code == 204:
-                        log_message("info", f"Pesan dengan ID {message_id} berhasil dihapus.")
-                    else:
-                        log_message("error", f"Gagal menghapus pesan: {delete_response.status_code}, {delete_response.text}")
+                    retries = 0
+                    while retries < max_retries:
+                        delete_response = requests.delete(f"https://discord.com/api/v9/channels/{channel_id}/messages/{message_id}", headers=headers)
+                        if delete_response.status_code == 204:
+                            log_message("info", f"Pesan dengan ID {message_id} berhasil dihapus.")
+                            break
+                        else:
+                            retries += 1
+                            log_message("warning", f"Gagal menghapus pesan (percobaan {retries}): {delete_response.status_code}, {delete_response.text}")
+                            time.sleep(1)
+                    if retries == max_retries:
+                        log_message("error", f"Pesan dengan ID {message_id} gagal dihapus setelah {max_retries} percobaan.")
             elif get_response.status_code == 429:
                 retry_after = float(get_response.json().get("retry_after", 1))
                 log_message("warning", f"Rate limit terkena saat GET pesan. Tunggu {retry_after:.2f} detik.")
