@@ -23,7 +23,7 @@ def log_message(level, message):
         print(Fore.RED + message + Style.RESET_ALL)
 
 def kirim_pesan(channel_id, token, emoji_list, waktu_hapus, waktu_kirim):
-    """Mengirim emoji pada channel tertentu menggunakan token."""
+    """Mengirim dan menghapus emoji pada channel tertentu menggunakan token."""
     headers = {'Authorization': token}
     max_retries = 5  # Jumlah percobaan maksimum untuk penghapusan
     while True:
@@ -46,30 +46,35 @@ def kirim_pesan(channel_id, token, emoji_list, waktu_hapus, waktu_kirim):
             time.sleep(waktu_hapus)
 
             # Ambil dan hapus pesan
-            get_response = requests.get(f"https://discord.com/api/v9/channels/{channel_id}/messages", headers=headers)
-            if get_response.status_code == 200:
-                messages = get_response.json()
-                if messages:
-                    message_id = messages[0]['id']
-                    retries = 0
-                    while retries < max_retries:
+            retries = 0
+            while retries < max_retries:
+                get_response = requests.get(f"https://discord.com/api/v9/channels/{channel_id}/messages", headers=headers)
+                if get_response.status_code == 200:
+                    messages = get_response.json()
+                    if messages:
+                        message_id = messages[0]['id']
                         delete_response = requests.delete(f"https://discord.com/api/v9/channels/{channel_id}/messages/{message_id}", headers=headers)
                         if delete_response.status_code == 204:
                             log_message("info", f"Pesan dengan ID {message_id} berhasil dihapus.")
                             break
                         else:
+                            log_message("warning", f"Gagal menghapus pesan (percobaan {retries + 1}): {delete_response.status_code}, {delete_response.text}")
                             retries += 1
-                            log_message("warning", f"Gagal menghapus pesan (percobaan {retries}): {delete_response.status_code}, {delete_response.text}")
                             time.sleep(1)
-                    if retries == max_retries:
-                        log_message("error", f"Pesan dengan ID {message_id} gagal dihapus setelah {max_retries} percobaan.")
-            elif get_response.status_code == 429:
-                retry_after = float(get_response.json().get("retry_after", 1))
-                log_message("warning", f"Rate limit terkena saat GET pesan. Tunggu {retry_after:.2f} detik.")
-                time.sleep(retry_after)
-                continue
-            else:
-                log_message("error", f"Gagal mendapatkan pesan: {get_response.status_code}, {get_response.text}")
+                    else:
+                        log_message("warning", "Tidak ada pesan yang tersedia untuk dihapus.")
+                        break
+                elif get_response.status_code == 429:
+                    retry_after = float(get_response.json().get("retry_after", 1))
+                    log_message("warning", f"Rate limit terkena saat GET pesan. Tunggu {retry_after:.2f} detik.")
+                    time.sleep(retry_after)
+                    continue
+                else:
+                    log_message("error", f"Gagal mendapatkan pesan: {get_response.status_code}, {get_response.text}")
+                    break
+
+            if retries == max_retries:
+                log_message("error", f"Pesan dengan ID {message_id} gagal dihapus setelah {max_retries} percobaan.")
 
             time.sleep(waktu_kirim)
         except requests.exceptions.RequestException as e:
@@ -97,7 +102,7 @@ try:
         raise ValueError("Channel ID harus berupa angka.")
     
     waktu_hapus = float(input("Set Waktu Hapus Pesan (minimal 0.1 detik): "))
-    waktu_kirim = float(input("Set Waktu Kirim Emoji (minimal 0.1 detik): "))
+    waktu_kirim = float(input("Set Waktu Kirim Pesan/Emoji (minimal 0.1 detik): "))
     if waktu_hapus < 0.1 or waktu_kirim < 0.1:
         raise ValueError("Waktu harus minimal 0.1 detik.")
 
