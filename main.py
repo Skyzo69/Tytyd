@@ -22,25 +22,25 @@ def log_message(level, message):
         logging.error(message)
         print(Fore.RED + message + Style.RESET_ALL)
 
-def kirim_pesan(channel_id, token, pesan_list, emoji_list, waktu_hapus, waktu_kirim):
-    """Mengirim dan menghapus pesan pada channel tertentu menggunakan token."""
+def kirim_pesan(channel_id, token, emoji_list, waktu_hapus, waktu_kirim):
+    """Mengirim emoji pada channel tertentu menggunakan token."""
     headers = {'Authorization': token}
     max_retries = 5  # Jumlah percobaan maksimum untuk penghapusan
     while True:
         try:
-            # Kirim pesan/emoji
-            payload = {'content': random.choice(pesan_list) if random.random() < 0.5 else random.choice(emoji_list)}
+            # Kirim emoji
+            payload = {'content': random.choice(emoji_list)}
             send_response = requests.post(f"https://discord.com/api/v9/channels/{channel_id}/messages", data=payload, headers=headers)
 
             if send_response.status_code == 200:
-                log_message("info", f"Pesan/Emoji dikirim: {payload['content']}")
+                log_message("info", f"Emoji dikirim: {payload['content']}")
             elif send_response.status_code == 429:
                 retry_after = float(send_response.json().get("retry_after", 1))
                 log_message("warning", f"Rate limit terkena. Tunggu selama {retry_after:.2f} detik.")
                 time.sleep(retry_after)
                 continue
             else:
-                log_message("error", f"Gagal mengirim pesan/emoji: {send_response.status_code}, {send_response.text}")
+                log_message("error", f"Gagal mengirim emoji: {send_response.status_code}, {send_response.text}")
                 break
 
             time.sleep(waktu_hapus)
@@ -79,12 +79,6 @@ def kirim_pesan(channel_id, token, pesan_list, emoji_list, waktu_hapus, waktu_ki
 
 # Validasi input
 try:
-    # Baca file pesan
-    with open("pesan.txt", "r") as f:
-        pesan_list = [line.strip() for line in f.readlines()]
-    if not pesan_list:
-        raise ValueError("File pesan kosong.")
-
     # Baca file emoji
     with open("emoji.txt", "r") as f:
         emoji_list = [line.strip() for line in f.readlines()]
@@ -103,7 +97,7 @@ try:
         raise ValueError("Channel ID harus berupa angka.")
     
     waktu_hapus = float(input("Set Waktu Hapus Pesan (minimal 0.1 detik): "))
-    waktu_kirim = float(input("Set Waktu Kirim Pesan/Emoji (minimal 0.1 detik): "))
+    waktu_kirim = float(input("Set Waktu Kirim Emoji (minimal 0.1 detik): "))
     if waktu_hapus < 0.1 or waktu_kirim < 0.1:
         raise ValueError("Waktu harus minimal 0.1 detik.")
 
@@ -112,9 +106,9 @@ except Exception as e:
     exit()
 
 # Eksekusi dengan ThreadPoolExecutor
-log_message("info", "Memulai pengiriman pesan/emoji...")
+log_message("info", "Memulai pengiriman emoji...")
 with ThreadPoolExecutor(max_workers=20) as executor:
     for token in tokens:
-        executor.submit(kirim_pesan, channel_id, token, pesan_list, emoji_list, waktu_hapus, waktu_kirim)
+        executor.submit(kirim_pesan, channel_id, token, emoji_list, waktu_hapus, waktu_kirim)
 
 log_message("info", "Selesai.")
