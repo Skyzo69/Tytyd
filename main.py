@@ -98,8 +98,8 @@ async def main():
         if not channel_id.isdigit():
             raise ValueError("Channel ID harus berupa angka.")
         
-        waktu_hapus = float(input("Set Waktu Hapus Pesan (minimal 0.1 detik): "))
-        waktu_kirim = float(input("Set Waktu Kirim Pesan/Emoji (minimal 0.1 detik): "))
+        waktu_hapus = float(input("Set Waktu Hapus Pesan (minimal 0.05 detik): "))
+        waktu_kirim = float(input("Set Waktu Kirim Pesan/Emoji (minimal 0.05 detik): "))
         if waktu_hapus < 0.1 or waktu_kirim < 0.1:
             raise ValueError("Waktu harus minimal 0.1 detik.")
 
