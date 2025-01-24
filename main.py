@@ -1,9 +1,8 @@
 import requests
 import random
 import time
-import threading
-from concurrent.futures import ThreadPoolExecutor
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from colorama import Fore, Style
 
 # Konfigurasi logging ke file
@@ -112,7 +111,7 @@ except Exception as e:
 
 # Eksekusi dengan ThreadPoolExecutor
 log_message("info", "Memulai pengiriman emoji...")
-with ThreadPoolExecutor(max_workers=len(tokens)) as executor:
+with ThreadPoolExecutor(max_workers=100) as executor:  # Batasi maksimal 5 token berjalan paralel
     for token in tokens:
         executor.submit(kirim_pesan, channel_id, token, emoji_list, waktu_hapus, waktu_kirim)
 
