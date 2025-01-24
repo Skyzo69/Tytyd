@@ -21,7 +21,7 @@ def log_message(level, message):
         logging.error(message)
         print(Fore.RED + message + Style.RESET_ALL)
 
-def kirim_pesan(channel_id, token, emoji_list, waktu_hapus, waktu_kirim):
+def kirim_pesan(channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim):
     """Mengirim dan menghapus emoji pada channel tertentu menggunakan token."""
     headers = {'Authorization': token}
     max_retries = 5  # Jumlah percobaan maksimum untuk penghapusan
@@ -32,14 +32,14 @@ def kirim_pesan(channel_id, token, emoji_list, waktu_hapus, waktu_kirim):
             send_response = requests.post(f"https://discord.com/api/v9/channels/{channel_id}/messages", data=payload, headers=headers)
 
             if send_response.status_code == 200:
-                log_message("info", f"Token {token[:10]}...: Emoji dikirim: {payload['content']}")
+                log_message("info", f"Token {nama_token} ({token[:10]}...): Emoji dikirim: {payload['content']}")
             elif send_response.status_code == 429:
                 retry_after = float(send_response.json().get("retry_after", 1))
-                log_message("warning", f"Token {token[:10]}...: Rate limit terkena. Tunggu selama {retry_after:.2f} detik.")
+                log_message("warning", f"Token {nama_token} ({token[:10]}...): Rate limit terkena. Tunggu selama {retry_after:.2f} detik.")
                 time.sleep(retry_after)
                 continue
             else:
-                log_message("error", f"Token {token[:10]}...: Gagal mengirim emoji: {send_response.status_code}, {send_response.text}")
+                log_message("error", f"Token {nama_token} ({token[:10]}...): Gagal mengirim emoji: {send_response.status_code}, {send_response.text}")
                 break
 
             time.sleep(waktu_hapus)
@@ -54,32 +54,32 @@ def kirim_pesan(channel_id, token, emoji_list, waktu_hapus, waktu_kirim):
                         message_id = messages[0]['id']
                         delete_response = requests.delete(f"https://discord.com/api/v9/channels/{channel_id}/messages/{message_id}", headers=headers)
                         if delete_response.status_code == 204:
-                            log_message("info", f"Token {token[:10]}...: Pesan dengan ID {message_id} berhasil dihapus.")
+                            log_message("info", f"Token {nama_token} ({token[:10]}...): Pesan dengan ID {message_id} berhasil dihapus.")
                             break
                         else:
-                            log_message("warning", f"Token {token[:10]}...: Gagal menghapus pesan (percobaan {retries + 1}): {delete_response.status_code}, {delete_response.text}")
+                            log_message("warning", f"Token {nama_token} ({token[:10]}...): Gagal menghapus pesan (percobaan {retries + 1}): {delete_response.status_code}, {delete_response.text}")
                             retries += 1
                             time.sleep(1)
                     else:
-                        log_message("warning", f"Token {token[:10]}...: Tidak ada pesan yang tersedia untuk dihapus.")
+                        log_message("warning", f"Token {nama_token} ({token[:10]}...): Tidak ada pesan yang tersedia untuk dihapus.")
                         break
                 elif get_response.status_code == 429:
                     retry_after = float(get_response.json().get("retry_after", 1))
-                    log_message("warning", f"Token {token[:10]}...: Rate limit terkena saat GET pesan. Tunggu {retry_after:.2f} detik.")
+                    log_message("warning", f"Token {nama_token} ({token[:10]}...): Rate limit terkena saat GET pesan. Tunggu {retry_after:.2f} detik.")
                     time.sleep(retry_after)
                     continue
                 else:
-                    log_message("error", f"Token {token[:10]}...: Gagal mendapatkan pesan: {get_response.status_code}, {get_response.text}")
+                    log_message("error", f"Token {nama_token} ({token[:10]}...): Gagal mendapatkan pesan: {get_response.status_code}, {get_response.text}")
                     break
 
             if retries == max_retries:
-                log_message("error", f"Token {token[:10]}...: Pesan dengan ID {message_id} gagal dihapus setelah {max_retries} percobaan.")
+                log_message("error", f"Token {nama_token} ({token[:10]}...): Pesan dengan ID {message_id} gagal dihapus setelah {max_retries} percobaan.")
 
             time.sleep(waktu_kirim)
         except requests.exceptions.RequestException as e:
-            log_message("error", f"Token {token[:10]}...: Request error: {e}")
+            log_message("error", f"Token {nama_token} ({token[:10]}...): Request error: {e}")
         except Exception as e:
-            log_message("error", f"Token {token[:10]}...: Error tidak terduga: {e}")
+            log_message("error", f"Token {nama_token} ({token[:10]}...): Error tidak terduga: {e}")
 
 # Validasi input
 try:
@@ -89,9 +89,9 @@ try:
     if not emoji_list:
         raise ValueError("File emoji kosong.")
 
-    # Baca file token
+    # Baca file token dan nama
     with open("token.txt", "r") as f:
-        tokens = [line.strip() for line in f.readlines()]
+        tokens = [line.strip().split(":") for line in f.readlines()]  # Format: nama_token:token
     if not tokens:
         raise ValueError("File token kosong.")
 
@@ -111,8 +111,8 @@ except Exception as e:
 
 # Eksekusi dengan ThreadPoolExecutor
 log_message("info", "Memulai pengiriman emoji...")
-with ThreadPoolExecutor(max_workers=20) as executor:  # Batasi maksimal 5 token berjalan paralel
-    for token in tokens:
-        executor.submit(kirim_pesan, channel_id, token, emoji_list, waktu_hapus, waktu_kirim)
+with ThreadPoolExecutor(max_workers=20) as executor:  # Batasi maksimal 20 token berjalan paralel
+    for nama_token, token in tokens:
+        executor.submit(kirim_pesan, channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim)
 
 log_message("info", "Selesai.")
