@@ -2,6 +2,7 @@ import random
 import time
 import logging
 import requests
+import threading
 from colorama import Fore, Style
 
 # Konfigurasi logging ke file
@@ -21,7 +22,7 @@ def log_message(level, message):
         print(Fore.RED + message + Style.RESET_ALL)
 
 def kirim_pesan(channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim):
-    """Mengirim dan menghapus emoji pada channel tertentu menggunakan token secara synchronous."""
+    """Mengirim dan menghapus emoji pada channel tertentu menggunakan token secara paralel."""
     headers = {'Authorization': token}
     max_retries = 5  # Jumlah percobaan maksimum untuk penghapusan
 
@@ -103,11 +104,18 @@ def main():
         log_message("error", f"Input error: {e}")
         return
 
-    log_message("info", "Memulai pengiriman emoji...")
+    log_message("info", "Memulai pengiriman emoji dengan multi-token...")
 
-    # Jalankan proses untuk setiap token
+    # Jalankan proses untuk setiap token dalam thread terpisah
+    threads = []
     for nama_token, token in tokens:
-        kirim_pesan(channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim)
+        thread = threading.Thread(target=kirim_pesan, args=(channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim), daemon=True)
+        thread.start()
+        threads.append(thread)
+
+    # Menunggu semua thread selesai
+    for thread in threads:
+        thread.join()
 
     log_message("info", "Selesai.")
 
