@@ -1,8 +1,8 @@
 import random
 import time
 import logging
-import requests
-import threading
+import aiohttp
+import asyncio
 from colorama import Fore, Style
 
 # Konfigurasi logging ke file
@@ -21,62 +21,60 @@ def log_message(level, message):
         logging.error(message)
         print(Fore.RED + message + Style.RESET_ALL)
 
-def kirim_pesan(channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim):
-    """Mengirim dan menghapus emoji pada channel tertentu menggunakan token secara paralel."""
+async def kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim):
+    """Mengirim dan menghapus emoji pada channel tertentu menggunakan token secara asynchronous."""
     headers = {'Authorization': token}
     max_retries = 5  # Jumlah percobaan maksimum untuk penghapusan
+    message_id = None  # Variabel untuk menyimpan ID pesan
 
     while True:
         try:
             # Kirim emoji dan simpan ID pesan yang dikirim
             payload = {'content': random.choice(emoji_list)}
-            send_response = requests.post(f"https://discord.com/api/v9/channels/{channel_id}/messages",
-                                          json=payload, headers=headers)
+            async with session.post(f"https://discord.com/api/v9/channels/{channel_id}/messages", json=payload, headers=headers) as send_response:
+                if send_response.status == 200:
+                    message_data = await send_response.json()
+                    message_id = message_data['id']  # Simpan ID pesan
+                    log_message("info", f"Token {nama_token} ({token[:10]}...): Emoji dikirim: {payload['content']}, ID: {message_id}")
+                elif send_response.status == 429:
+                    retry_after = (await send_response.json()).get("retry_after", 1)
+                    log_message("warning", f"Token {nama_token} ({token[:10]}...): Rate limit terkena. Tunggu selama {retry_after:.2f} detik.")
+                    await asyncio.sleep(retry_after)
+                    continue
+                else:
+                    log_message("error", f"Token {nama_token} ({token[:10]}...): Gagal mengirim emoji: {send_response.status}")
+                    break
 
-            if send_response.status_code == 200:
-                message_data = send_response.json()
-                message_id = message_data['id']  # Simpan ID pesan
-                log_message("info", f"Token {nama_token} ({token[:10]}...): Emoji dikirim: {payload['content']}, ID: {message_id}")
-            elif send_response.status_code == 429:
-                retry_after = send_response.json().get("retry_after", 1)
-                log_message("warning", f"Token {nama_token} ({token[:10]}...): Rate limit terkena. Tunggu selama {retry_after:.2f} detik.")
-                time.sleep(retry_after)
-                continue
-            else:
-                log_message("error", f"Token {nama_token} ({token[:10]}...): Gagal mengirim emoji: {send_response.status_code}")
-                break
-
-            time.sleep(waktu_hapus)
+            await asyncio.sleep(waktu_hapus)
 
             # Coba hapus pesan dengan ID yang telah disimpan
             retries = 0
-            while retries < max_retries:
-                delete_response = requests.delete(f"https://discord.com/api/v9/channels/{channel_id}/messages/{message_id}",
-                                                  headers=headers)
-                if delete_response.status_code == 204:
-                    log_message("info", f"Token {nama_token} ({token[:10]}...): Pesan dengan ID {message_id} berhasil dihapus.")
-                    break
-                elif delete_response.status_code == 404:
-                    log_message("warning", f"Token {nama_token} ({token[:10]}...): Pesan tidak ditemukan, mungkin sudah tertimpa.")
-                    break
-                elif delete_response.status_code == 429:
-                    retry_after = delete_response.json().get("retry_after", 1)
-                    log_message("warning", f"Token {nama_token} ({token[:10]}...): Rate limit saat menghapus pesan. Tunggu {retry_after:.2f} detik.")
-                    time.sleep(retry_after)
-                    continue
-                else:
-                    log_message("warning", f"Token {nama_token} ({token[:10]}...): Gagal menghapus pesan (percobaan {retries + 1}): {delete_response.status_code}")
-                    retries += 1
-                    time.sleep(1)
+            while retries < max_retries and message_id:
+                async with session.delete(f"https://discord.com/api/v9/channels/{channel_id}/messages/{message_id}", headers=headers) as delete_response:
+                    if delete_response.status == 204:
+                        log_message("info", f"Token {nama_token} ({token[:10]}...): Pesan dengan ID {message_id} berhasil dihapus.")
+                        break
+                    elif delete_response.status == 404:
+                        log_message("warning", f"Token {nama_token} ({token[:10]}...): Pesan tidak ditemukan, mungkin sudah tertimpa.")
+                        break
+                    elif delete_response.status == 429:
+                        retry_after = (await delete_response.json()).get("retry_after", 1)
+                        log_message("warning", f"Token {nama_token} ({token[:10]}...): Rate limit saat menghapus pesan. Tunggu {retry_after:.2f} detik.")
+                        await asyncio.sleep(retry_after)
+                        continue
+                    else:
+                        log_message("warning", f"Token {nama_token} ({token[:10]}...): Gagal menghapus pesan (percobaan {retries + 1}): {delete_response.status}")
+                        retries += 1
+                        await asyncio.sleep(1)
 
-            if retries == max_retries:
+            if retries == max_retries and message_id:
                 log_message("error", f"Token {nama_token} ({token[:10]}...): Pesan dengan ID {message_id} gagal dihapus setelah {max_retries} percobaan.")
 
-            time.sleep(waktu_kirim)
+            await asyncio.sleep(waktu_kirim)
         except Exception as e:
             log_message("error", f"Token {nama_token} ({token[:10]}...): Error tidak terduga: {e}")
 
-def main():
+async def main():
     try:
         # Baca file emoji
         with open("emoji.txt", "r") as f:
@@ -106,19 +104,17 @@ def main():
 
     log_message("info", "Memulai pengiriman emoji dengan multi-token...")
 
-    # Jalankan proses untuk setiap token dalam thread terpisah
-    threads = []
-    for nama_token, token in tokens:
-        thread = threading.Thread(target=kirim_pesan, args=(channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim), daemon=True)
-        thread.start()
-        threads.append(thread)
+    # Jalankan proses untuk setiap token dalam thread terpisah menggunakan asyncio
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        for nama_token, token in tokens:
+            tasks.append(kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim))
 
-    # Menunggu semua thread selesai
-    for thread in threads:
-        thread.join()
+        # Menjalankan semua tugas secara paralel
+        await asyncio.gather(*tasks)
 
     log_message("info", "Selesai.")
 
 # Jalankan program utama
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
