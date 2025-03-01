@@ -4,6 +4,7 @@ import logging
 import aiohttp
 import asyncio
 from colorama import Fore, Style
+from datetime import datetime, timedelta
 
 # Konfigurasi logging ke file
 logging.basicConfig(filename="activity.log", level=logging.INFO,
@@ -21,13 +22,13 @@ def log_message(level, message):
         logging.error(message)
         print(Fore.RED + message + Style.RESET_ALL)
 
-async def kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim):
+async def kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim, waktu_stop):
     """Mengirim dan menghapus emoji pada channel tertentu menggunakan token secara asynchronous."""
     headers = {'Authorization': token}
     max_retries = 5  # Jumlah percobaan maksimum untuk penghapusan
     message_id = None  # Variabel untuk menyimpan ID pesan
 
-    while True:
+    while datetime.now() < waktu_stop:
         try:
             # Kirim emoji dan simpan ID pesan yang dikirim
             payload = {'content': random.choice(emoji_list)}
@@ -74,6 +75,8 @@ async def kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_
         except Exception as e:
             log_message("error", f"Token {nama_token} ({token[:10]}...): Error tidak terduga: {e}")
 
+    log_message("info", f"Token {nama_token} ({token[:10]}...): Waktu berhenti tercapai, menghentikan proses.")
+
 async def main():
     try:
         # Baca file emoji
@@ -98,17 +101,23 @@ async def main():
         if waktu_hapus < 0.01 or waktu_kirim < 0.01:
             raise ValueError("Waktu harus minimal 0.01 detik.")
 
+        waktu_berhenti_menit = int(input("Masukkan waktu berhenti dalam menit: "))
+        if waktu_berhenti_menit <= 0:
+            raise ValueError("Waktu berhenti harus lebih dari 0 menit.")
+
+        waktu_stop = datetime.now() + timedelta(minutes=waktu_berhenti_menit)
+
     except Exception as e:
         log_message("error", f"Input error: {e}")
         return
 
-    log_message("info", "Memulai pengiriman emoji dengan multi-token...")
+    log_message("info", f"Memulai pengiriman emoji dengan multi-token hingga {waktu_stop.strftime('%H:%M:%S')}...")
 
     # Jalankan proses untuk setiap token dalam thread terpisah menggunakan asyncio
     async with aiohttp.ClientSession() as session:
         tasks = []
         for nama_token, token in tokens:
-            tasks.append(kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim))
+            tasks.append(kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim, waktu_stop))
 
         # Menjalankan semua tugas secara paralel
         await asyncio.gather(*tasks)
