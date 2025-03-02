@@ -18,25 +18,25 @@ def log_message(level, message):
     """Log pesan ke file dan konsol dengan format warna-warni"""
     color_map = {"info": Fore.GREEN, "warning": Fore.YELLOW, "error": Fore.RED}
     color = color_map.get(level, Style.RESET_ALL)
+
     logging.log(getattr(logging, level.upper()), message)
     print(f"{color}{message}{Style.RESET_ALL}")
 
-async def kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, progress_bar):
-    """Mengirim dan menghapus emoji pada channel tertentu menggunakan token secara asynchronous."""
+async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, progress_bar, counter):
+    """Mengirim dan menghapus pesan pada channel tertentu menggunakan token secara asynchronous."""
     headers = {"Authorization": token}
-    max_retries = 5  # Jumlah percobaan maksimum untuk penghapusan
-    message_id = None  # Variabel untuk menyimpan ID pesan
+    max_retries = 5  
+    message_id = None  
 
     # Tunggu hingga waktu mulai tercapai
     while datetime.now() < waktu_mulai:
         await asyncio.sleep(1)
 
-    log_message("info", f"{nama_token}: ▶️ Mulai mengirim emoji pada {waktu_mulai.strftime('%H:%M:%S')}")
+    log_message("info", f"{nama_token}: ▶️ Mulai mengirim pesan pada {waktu_mulai.strftime('%H:%M:%S')}")
 
     while datetime.now() < waktu_stop:
         try:
-            # Kirim emoji dan simpan ID pesan yang dikirim
-            payload = {"content": random.choice(emoji_list)}
+            payload = {"content": random.choice(pesan_list)}
             async with session.post(
                 f"https://discord.com/api/v9/channels/{channel_id}/messages",
                 json=payload,
@@ -44,20 +44,21 @@ async def kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_
             ) as send_response:
                 if send_response.status == 200:
                     message_data = await send_response.json()
-                    message_id = message_data["id"]  # Simpan ID pesan
-                    log_message("info", f"{nama_token}: ✅ Emoji dikirim {payload['content']} (ID: {message_id})")
+                    message_id = message_data["id"]
+                    counter[nama_token] += 1  # Tambah jumlah pesan terkirim
+                    log_message("info", f"{nama_token}: ✅ Pesan ke-{counter[nama_token]} dikirim: {payload['content']} (ID: {message_id})")
                 elif send_response.status == 429:
                     retry_after = (await send_response.json()).get("retry_after", 1)
                     log_message("warning", f"{nama_token}: ⏳ Rate limit! Tunggu {retry_after:.2f} detik.")
                     await asyncio.sleep(retry_after)
                     continue
                 else:
-                    log_message("error", f"{nama_token}: ❌ Gagal kirim emoji ({send_response.status})")
+                    log_message("error", f"{nama_token}: ❌ Gagal kirim pesan ({send_response.status})")
                     break
 
             await asyncio.sleep(waktu_hapus)
 
-            # Coba hapus pesan dengan ID yang telah disimpan
+            # Hapus pesan
             retries = 0
             while retries < max_retries and message_id:
                 async with session.delete(
@@ -65,7 +66,7 @@ async def kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_
                     headers=headers,
                 ) as delete_response:
                     if delete_response.status == 204:
-                        log_message("info", f"{nama_token}: 🗑️ Pesan {message_id} dihapus")
+                        log_message("info", f"{nama_token}: 🗑️ Pesan ke-{counter[nama_token]} ({message_id}) dihapus")
                         break
                     elif delete_response.status == 404:
                         log_message("warning", f"{nama_token}: ❓ Pesan {message_id} tidak ditemukan")
@@ -84,27 +85,27 @@ async def kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_
                 log_message("error", f"{nama_token}: ❌ Gagal hapus pesan {message_id} setelah {max_retries} percobaan.")
 
             await asyncio.sleep(waktu_kirim)
-            progress_bar.update(1)  # Update progress bar setiap pesan dikirim
+            progress_bar.update(1)  
         except Exception as e:
             log_message("error", f"{nama_token}: 🚨 Error: {e}")
 
-    log_message("info", f"{nama_token}: ⏹️ Waktu habis, berhenti mengirim emoji.")
+    log_message("info", f"{nama_token}: ⏹️ Waktu habis, berhenti mengirim pesan. Total terkirim: {counter[nama_token]}")
 
 async def main():
     try:
-        # Baca file emoji
-        with open("emoji.txt", "r") as f:
-            emoji_list = [line.strip() for line in f.readlines()]
-        if not emoji_list:
-            raise ValueError("⚠️ File emoji.txt kosong!")
+        # Baca file pesan
+        with open("pesan.txt", "r") as f:
+            pesan_list = [line.strip() for line in f.readlines()]
+        if not pesan_list:
+            raise ValueError("⚠️ File pesan.txt kosong!")
 
-        # Baca file token dan nama
+        # Baca file token
         with open("token.txt", "r") as f:
-            tokens = [line.strip().split(":") for line in f.readlines() if ":" in line]  # Format: nama_token:token
+            tokens = [line.strip().split(":") for line in f.readlines() if ":" in line]
         if not tokens:
             raise ValueError("⚠️ File token.txt kosong!")
 
-        # Input dari pengguna
+        # Input pengguna
         channel_id = input("🔹 Masukkan ID channel: ").strip()
         if not channel_id.isdigit():
             raise ValueError("⚠️ Channel ID harus angka!")
@@ -117,6 +118,7 @@ async def main():
         # Minta waktu mulai dan waktu berhenti untuk setiap token
         waktu_mulai_dict = {}
         waktu_stop_dict = {}
+        counter = {nama_token: 0 for nama_token, _ in tokens}  # Inisialisasi counter
 
         for nama_token, _ in tokens:
             waktu_mulai_menit = int(input(f"⏳ Masukkan waktu mulai untuk {nama_token} (dalam menit dari sekarang): "))
@@ -132,23 +134,26 @@ async def main():
         log_message("error", f"🚨 Input error: {e}")
         return
 
-    log_message("info", "🚀 Memulai pengiriman emoji...")
+    log_message("info", "🚀 Memulai pengiriman pesan...")
 
     # Progress bar
     total_pesan = sum(
         (waktu_stop_dict[nama_token] - waktu_mulai_dict[nama_token]).total_seconds() // (waktu_kirim + waktu_hapus)
         for nama_token, _ in tokens
     )
-    
     with tqdm(total=int(total_pesan), desc="📩 Progres Pengiriman") as progress_bar:
         async with aiohttp.ClientSession() as session:
             tasks = [
-                asyncio.shield(kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token], progress_bar))
+                asyncio.shield(kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token], progress_bar, counter))
                 for nama_token, token in tokens
             ]
             await asyncio.gather(*tasks, return_exceptions=True)
 
+    # Menampilkan ringkasan akhir
     log_message("info", "🎉 Semua token telah selesai!")
+    log_message("info", "\n📊 **Ringkasan Pengiriman:**")
+    for nama_token, jumlah in counter.items():
+        log_message("info", f"🔹 {nama_token}: {jumlah} pesan terkirim")
 
 if __name__ == "__main__":
     try:
