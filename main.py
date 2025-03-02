@@ -31,7 +31,7 @@ async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_
     waktu_tunggu = (waktu_mulai - datetime.now()).total_seconds()
     if waktu_tunggu > 0:
         log_message("info", f"{nama_token}: ⏳ Menunggu hingga {waktu_mulai.strftime('%H:%M:%S')}")
-        await asyncio.sleep(waktu_tunggu)
+        await asyncio.sleep(waktu_tunggu)  # Ini tetap pakai await karena hanya sekali
 
     log_message("info", f"{nama_token}: ▶️ Mulai mengirim pesan pada {waktu_mulai.strftime('%H:%M:%S')}")
 
@@ -57,9 +57,10 @@ async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_
                     log_message("error", f"{nama_token}: ❌ Gagal kirim pesan ({send_response.status})")
                     break
 
-            await asyncio.sleep(waktu_hapus)
-
             # Hapus pesan
+            hapus_task = asyncio.create_task(asyncio.sleep(waktu_hapus))  # Tidak memblokir eksekusi task lain
+            await hapus_task  
+
             retries = 0
             while retries < max_retries and message_id:
                 async with session.delete(
@@ -82,14 +83,14 @@ async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_
             if retries == max_retries and message_id:
                 log_message("error", f"{nama_token}: ❌ Gagal hapus pesan {message_id} setelah {max_retries} percobaan.")
 
-            await asyncio.sleep(waktu_kirim)
+            kirim_task = asyncio.create_task(asyncio.sleep(waktu_kirim))  # Tidak memblokir task lain
+            await kirim_task  
             progress_bar.update(1)
 
         except Exception as e:
             log_message("error", f"{nama_token}: 🚨 Error: {e}")
 
     log_message("info", f"{nama_token}: ⏹️ Waktu habis, berhenti mengirim pesan. Total terkirim: {counter[nama_token]}")
-
 async def main():
     try:
         # Baca file pesan
