@@ -101,7 +101,7 @@ async def main():
 
         # Baca file token dan nama
         with open("token.txt", "r") as f:
-            tokens = [line.strip().split(":") for line in f.readlines()]  # Format: nama_token:token
+            tokens = [line.strip().split(":") for line in f.readlines() if ":" in line]  # Format: nama_token:token
         if not tokens:
             raise ValueError("⚠️ File token.txt kosong!")
 
