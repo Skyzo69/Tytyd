@@ -1,25 +1,16 @@
 #!/bin/bash
 
-# Install Git
-pkg install git -y
+# Perbarui paket dan instal Python jika belum ada
+echo "🔹 Memeriksa dan memperbarui sistem..."
+sudo apt update && sudo apt upgrade -y
+sudo apt install python3 python3-pip -y
 
-# Clone the repository
-git clone https://github.com/bangpateng/push-dc
+# Pastikan pip terbaru
+echo "🔹 Memperbarui pip..."
+python3 -m pip install --upgrade pip
 
-# Install Python
-pkg install python -y
+# Instal semua dependensi yang diperlukan
+echo "🔹 Menginstal dependensi..."
+pip install -r requirements.txt
 
-# Update the system
-apt update && apt upgrade -y
-
-# Install OpenSSL
-pkg install openssl -y
-
-# Install Python packages
-pip install requests colorama
-
-# Change directory to the cloned repository
-cd push-dc
-
-# Run the Python script
-python main.py
+echo "✅ Instalasi selesai! Jalankan script dengan: python3 script.py"
