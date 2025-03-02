@@ -25,10 +25,9 @@ def log_message(level, message):
 async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, progress_bar, counter):
     """Mengirim dan menghapus pesan pada channel tertentu menggunakan token secara asynchronous."""
     headers = {"Authorization": token}
-    max_retries = 5  # Jumlah percobaan maksimum untuk penghapusan
-    message_id = None  # Variabel untuk menyimpan ID pesan
+    max_retries = 5
+    message_id = None
 
-    # Tunggu hingga waktu mulai tercapai
     while datetime.now() < waktu_mulai:
         await asyncio.sleep(1)
 
@@ -36,9 +35,9 @@ async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_
 
     while datetime.now() < waktu_stop:
         try:
-            # Kirim pesan dan simpan ID pesan yang dikirim
             payload = {"content": random.choice(pesan_list)}
-            counter[nama_token] += 1  # Hitung jumlah pengiriman per token
+            counter[nama_token] += 1
+
             async with session.post(
                 f"https://discord.com/api/v9/channels/{channel_id}/messages",
                 json=payload,
@@ -46,8 +45,9 @@ async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_
             ) as send_response:
                 if send_response.status == 200:
                     message_data = await send_response.json()
-                    message_id = message_data["id"]  # Simpan ID pesan
-                    log_message("info", f"{nama_token}: ✅ Pesan dikirim ke-{counter[nama_token]} {payload['content']} (ID: {message_id})")
+                    if "id" in message_data:
+                        message_id = message_data["id"]
+                        log_message("info", f"{nama_token}: ✅ Pesan dikirim ke-{counter[nama_token]} (ID: {message_id})")
                 elif send_response.status == 429:
                     retry_after = (await send_response.json()).get("retry_after", 1)
                     log_message("warning", f"{nama_token}: ⏳ Rate limit! Tunggu {retry_after:.2f} detik.")
@@ -59,7 +59,6 @@ async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_
 
             await asyncio.sleep(waktu_hapus)
 
-            # Coba hapus pesan dengan ID yang telah disimpan
             retries = 0
             while retries < max_retries and message_id:
                 async with session.delete(
@@ -86,7 +85,7 @@ async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_
                 log_message("error", f"{nama_token}: ❌ Gagal hapus pesan {message_id} setelah {max_retries} percobaan.")
 
             await asyncio.sleep(waktu_kirim)
-            progress_bar.update(1)  # Update progress bar setiap pesan dikirim
+            progress_bar.update(1)
         except Exception as e:
             log_message("error", f"{nama_token}: 🚨 Error: {e}")
 
@@ -94,19 +93,17 @@ async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_
 
 async def main():
     try:
-        # Baca file pesan
         with open("pesan.txt", "r") as f:
-            pesan_list = [line.strip() for line in f.readlines()]
+            pesan_list = [line.strip() for line in f.readlines() if line.strip()]
         if not pesan_list:
             raise ValueError("⚠️ File pesan.txt kosong!")
 
-        # Baca file token dan nama
         with open("token.txt", "r") as f:
-            tokens = [line.strip().split(":") for line in f.readlines() if ":" in line]  # Format: nama_token:token
+            tokens = [line.strip().split(":") for line in f.readlines()]
+            tokens = [(nama, tkn) for nama, tkn in tokens if len(tkn) > 10]
         if not tokens:
-            raise ValueError("⚠️ File token.txt kosong!")
+            raise ValueError("⚠️ File token.txt kosong atau format salah!")
 
-        # Input dari pengguna
         channel_id = input("🔹 Masukkan ID channel: ").strip()
         if not channel_id.isdigit():
             raise ValueError("⚠️ Channel ID harus angka!")
@@ -116,21 +113,20 @@ async def main():
         if waktu_hapus < 0.01 or waktu_kirim < 0.01:
             raise ValueError("⚠️ Waktu minimal adalah 0.01 detik!")
 
-        # Minta waktu mulai dan waktu berhenti untuk setiap token
         waktu_mulai_dict = {}
         waktu_stop_dict = {}
         counter = {}
 
         for nama_token, _ in tokens:
-            waktu_mulai_menit = int(input(f"⏳ Masukkan waktu mulai untuk {nama_token} (dalam menit dari sekarang): "))
-            waktu_berhenti_menit = int(input(f"⏰ Masukkan waktu berhenti untuk {nama_token} (menit setelah mulai): "))
+            waktu_mulai_menit = int(input(f"⏳ Waktu mulai untuk {nama_token} (menit dari sekarang): "))
+            waktu_berhenti_menit = int(input(f"⏰ Waktu berhenti untuk {nama_token} (menit setelah mulai): "))
 
             waktu_mulai = datetime.now() + timedelta(minutes=waktu_mulai_menit)
             waktu_stop = waktu_mulai + timedelta(minutes=waktu_berhenti_menit)
 
             waktu_mulai_dict[nama_token] = waktu_mulai
             waktu_stop_dict[nama_token] = waktu_stop
-            counter[nama_token] = 0  # Inisialisasi penghitung pengiriman per token
+            counter[nama_token] = 0
 
     except Exception as e:
         log_message("error", f"🚨 Input error: {e}")
@@ -138,18 +134,17 @@ async def main():
 
     log_message("info", "🚀 Memulai pengiriman pesan...")
 
-    # Progress bar
-    total_pesan = sum((waktu_stop_dict[nama_token] - waktu_mulai_dict[nama_token]).total_seconds() // (waktu_kirim + waktu_hapus) for nama_token, _ in tokens)
+    total_pesan = sum(
+        (waktu_stop_dict[nama_token] - waktu_mulai_dict[nama_token]).total_seconds() // max(waktu_kirim + waktu_hapus, 0.01)
+        for nama_token, _ in tokens
+    )
+
     with tqdm(total=int(total_pesan), desc="📩 Progres Pengiriman") as progress_bar:
         async with aiohttp.ClientSession() as session:
             tasks = [
-                asyncio.shield(kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token], progress_bar, counter))
+                kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token], progress_bar, counter)
                 for nama_token, token in tokens
             ]
             await asyncio.gather(*tasks, return_exceptions=True)
 
     log_message("info", "🎉 Semua token telah selesai!")
-
-    print("\n📊 **Ringkasan Pengiriman:**")
-    for nama_token, jumlah in counter.items():
-        print(f"🔹 {nama_token}: {jumlah} pesan terkirim")
