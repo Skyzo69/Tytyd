@@ -25,12 +25,13 @@ def log_message(level, message):
 async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, progress_bar, counter):
     """Mengirim dan menghapus pesan pada channel tertentu menggunakan token secara asynchronous."""
     headers = {"Authorization": token}
-    max_retries = 5  
-    message_id = None  
+    max_retries = 5
 
-    # Tunggu hingga waktu mulai tercapai
-    while datetime.now() < waktu_mulai:
-        await asyncio.sleep(1)
+    # Tunggu hingga waktu mulai
+    waktu_tunggu = (waktu_mulai - datetime.now()).total_seconds()
+    if waktu_tunggu > 0:
+        log_message("info", f"{nama_token}: ⏳ Menunggu hingga {waktu_mulai.strftime('%H:%M:%S')}")
+        await asyncio.sleep(waktu_tunggu)
 
     log_message("info", f"{nama_token}: ▶️ Mulai mengirim pesan pada {waktu_mulai.strftime('%H:%M:%S')}")
 
@@ -45,7 +46,7 @@ async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_
                 if send_response.status == 200:
                     message_data = await send_response.json()
                     message_id = message_data["id"]
-                    counter[nama_token] += 1  # Tambah jumlah pesan terkirim
+                    counter[nama_token] += 1
                     log_message("info", f"{nama_token}: ✅ Pesan ke-{counter[nama_token]} dikirim: {payload['content']} (ID: {message_id})")
                 elif send_response.status == 429:
                     retry_after = (await send_response.json()).get("retry_after", 1)
@@ -68,24 +69,22 @@ async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_
                     if delete_response.status == 204:
                         log_message("info", f"{nama_token}: 🗑️ Pesan ke-{counter[nama_token]} ({message_id}) dihapus")
                         break
-                    elif delete_response.status == 404:
-                        log_message("warning", f"{nama_token}: ❓ Pesan {message_id} tidak ditemukan")
-                        break
                     elif delete_response.status == 429:
                         retry_after = (await delete_response.json()).get("retry_after", 1)
                         log_message("warning", f"{nama_token}: ⏳ Rate limit saat hapus! Tunggu {retry_after:.2f} detik.")
                         await asyncio.sleep(retry_after)
                         continue
                     else:
-                        log_message("warning", f"{nama_token}: ⚠️ Gagal hapus pesan (Percobaan {retries + 1})")
                         retries += 1
+                        log_message("warning", f"{nama_token}: ⚠️ Gagal hapus pesan (Percobaan {retries})")
                         await asyncio.sleep(1)
 
             if retries == max_retries and message_id:
                 log_message("error", f"{nama_token}: ❌ Gagal hapus pesan {message_id} setelah {max_retries} percobaan.")
 
             await asyncio.sleep(waktu_kirim)
-            progress_bar.update(1)  
+            progress_bar.update(1)
+
         except Exception as e:
             log_message("error", f"{nama_token}: 🚨 Error: {e}")
 
@@ -118,10 +117,10 @@ async def main():
         # Minta waktu mulai dan waktu berhenti untuk setiap token
         waktu_mulai_dict = {}
         waktu_stop_dict = {}
-        counter = {nama_token: 0 for nama_token, _ in tokens}  # Inisialisasi counter
+        counter = {nama_token: 0 for nama_token, _ in tokens}
 
         for nama_token, _ in tokens:
-            waktu_mulai_menit = int(input(f"⏳ Masukkan waktu mulai untuk {nama_token} (dalam menit dari sekarang): "))
+            waktu_mulai_menit = int(input(f"⏳ Masukkan waktu mulai untuk {nama_token} (menit dari sekarang): "))
             waktu_berhenti_menit = int(input(f"⏰ Masukkan waktu berhenti untuk {nama_token} (menit setelah mulai): "))
 
             waktu_mulai = datetime.now() + timedelta(minutes=waktu_mulai_menit)
@@ -144,7 +143,7 @@ async def main():
     with tqdm(total=int(total_pesan), desc="📩 Progres Pengiriman") as progress_bar:
         async with aiohttp.ClientSession() as session:
             tasks = [
-                asyncio.shield(kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token], progress_bar, counter))
+                asyncio.create_task(kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token], progress_bar, counter))
                 for nama_token, token in tokens
             ]
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -156,8 +155,7 @@ async def main():
         log_message("info", f"🔹 {nama_token}: {jumlah} pesan terkirim")
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except RuntimeError:
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(main())
+    asyncio.run(main())
+except RuntimeError:
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
