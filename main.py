@@ -6,7 +6,6 @@ import asyncio
 from colorama import Fore, Style
 from datetime import datetime, timedelta
 from tqdm import tqdm
-from tabulate import tabulate
 
 # Konfigurasi logging ke file
 logging.basicConfig(
@@ -23,11 +22,17 @@ def log_message(level, message):
     logging.log(getattr(logging, level.upper()), message)
     print(f"{color}{message}{Style.RESET_ALL}")
 
-async def kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim, waktu_stop, progress_bar):
+async def kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, progress_bar):
     """Mengirim dan menghapus emoji pada channel tertentu menggunakan token secara asynchronous."""
     headers = {"Authorization": token}
     max_retries = 5  # Jumlah percobaan maksimum untuk penghapusan
     message_id = None  # Variabel untuk menyimpan ID pesan
+
+    # Tunggu hingga waktu mulai tercapai
+    while datetime.now() < waktu_mulai:
+        await asyncio.sleep(1)
+
+    log_message("info", f"{nama_token}: ▶️ Mulai mengirim emoji pada {waktu_mulai.strftime('%H:%M:%S')}")
 
     while datetime.now() < waktu_stop:
         try:
@@ -110,36 +115,37 @@ async def main():
         if waktu_hapus < 0.01 or waktu_kirim < 0.01:
             raise ValueError("⚠️ Waktu minimal adalah 0.01 detik!")
 
-        waktu_berhenti_menit = int(input("⏰ Masukkan waktu berhenti (menit): "))
-        if waktu_berhenti_menit <= 0:
-            raise ValueError("⚠️ Waktu berhenti harus lebih dari 0 menit!")
+        # Minta waktu mulai dan waktu berhenti untuk setiap token
+        waktu_mulai_dict = {}
+        waktu_stop_dict = {}
 
-        waktu_stop = datetime.now() + timedelta(minutes=waktu_berhenti_menit)
+        for nama_token, _ in tokens:
+            waktu_mulai_menit = int(input(f"⏳ Masukkan waktu mulai untuk {nama_token} (dalam menit dari sekarang): "))
+            waktu_berhenti_menit = int(input(f"⏰ Masukkan waktu berhenti untuk {nama_token} (menit setelah mulai): "))
+
+            waktu_mulai = datetime.now() + timedelta(minutes=waktu_mulai_menit)
+            waktu_stop = waktu_mulai + timedelta(minutes=waktu_berhenti_menit)
+
+            waktu_mulai_dict[nama_token] = waktu_mulai
+            waktu_stop_dict[nama_token] = waktu_stop
 
     except Exception as e:
         log_message("error", f"🚨 Input error: {e}")
         return
 
-    log_message("info", f"🚀 Memulai pengiriman hingga {waktu_stop.strftime('%H:%M:%S')}...")
+    log_message("info", "🚀 Memulai pengiriman emoji...")
 
     # Progress bar
-    total_pesan = waktu_berhenti_menit * 60 // (waktu_kirim + waktu_hapus)
-    with tqdm(total=total_pesan, desc="📩 Progres Pengiriman") as progress_bar:
+    total_pesan = sum((waktu_stop_dict[nama_token] - waktu_mulai_dict[nama_token]).total_seconds() // (waktu_kirim + waktu_hapus) for nama_token, _ in tokens)
+    with tqdm(total=int(total_pesan), desc="📩 Progres Pengiriman") as progress_bar:
         async with aiohttp.ClientSession() as session:
-            if hasattr(asyncio, "TaskGroup"):  # Python 3.11+
-                async with asyncio.TaskGroup() as tg:
-                    for nama_token, token in tokens:
-                        tg.create_task(
-                            kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim, waktu_stop, progress_bar)
-                        )
-            else:  # Python 3.10 ke bawah
-                tasks = [
-                    kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim, waktu_stop, progress_bar)
-                    for nama_token, token in tokens
-                ]
-                await asyncio.gather(*tasks)
+            tasks = [
+                asyncio.shield(kirim_pesan(session, channel_id, nama_token, token, emoji_list, waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token], progress_bar))
+                for nama_token, token in tokens
+            ]
+            await asyncio.gather(*tasks, return_exceptions=True)
 
-    log_message("info", "🎉 Selesai!")
+    log_message("info", "🎉 Semua token telah selesai!")
 
 if __name__ == "__main__":
     try:
