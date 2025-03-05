@@ -6,6 +6,7 @@ import asyncio
 from colorama import Fore, Style
 from datetime import datetime, timedelta
 from tqdm import tqdm
+from itertools import cycle  # Untuk iterasi siklis
 
 # Konfigurasi logging ke file
 logging.basicConfig(
@@ -40,6 +41,43 @@ async def validasi_token(tokens):
             *(cek_token(session, nama_token, token) for nama_token, token in tokens)
         )
     return all(hasil_validasi)  # Jika ada token yang salah, return False
+
+async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, progress_bar, counter):
+    """Mengirim dan menghapus pesan secara berurutan sesuai pesan.txt lalu loop ke awal"""
+    headers = {"Authorization": token, "Content-Type": "application/json"}
+    url = f"https://discord.com/api/v9/channels/{channel_id}/messages"
+    
+    pesan_iterator = cycle(pesan_list)  # Iterasi siklis agar kembali ke awal saat habis
+
+    while datetime.now() < waktu_stop:
+        if datetime.now() < waktu_mulai:
+            await asyncio.sleep(1)
+            continue
+
+        pesan = next(pesan_iterator)  # Ambil pesan dari iterator siklis
+        data = {"content": pesan}
+
+        async with session.post(url, headers=headers, json=data) as response:
+            if response.status == 200:
+                message_id = (await response.json())["id"]
+                log_message("info", f"{nama_token}: 📩 Pesan terkirim - {pesan}")
+                counter[nama_token] += 1
+                progress_bar.update(1)
+
+                await asyncio.sleep(waktu_hapus)
+
+                # Menghapus pesan
+                delete_url = f"{url}/{message_id}"
+                async with session.delete(delete_url, headers=headers) as del_response:
+                    if del_response.status == 204:
+                        log_message("info", f"{nama_token}: 🗑️ Pesan dihapus")
+                    else:
+                        log_message("error", f"{nama_token}: ❌ Gagal menghapus pesan")
+
+            else:
+                log_message("error", f"{nama_token}: ❌ Gagal mengirim pesan (Status: {response.status})")
+
+        await asyncio.sleep(waktu_kirim)
 
 async def main():
     try:
