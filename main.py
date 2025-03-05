@@ -6,7 +6,7 @@ import asyncio
 from colorama import Fore, Style
 from datetime import datetime, timedelta
 from tqdm import tqdm
-from itertools import cycle  # Untuk iterasi siklis
+from itertools import cycle
 
 # Konfigurasi logging ke file
 logging.basicConfig(
@@ -40,54 +40,73 @@ async def validasi_token(tokens):
         hasil_validasi = await asyncio.gather(
             *(cek_token(session, nama_token, token) for nama_token, token in tokens)
         )
-    return all(hasil_validasi)  # Jika ada token yang salah, return False
+    return all(hasil_validasi)
 
 async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, progress_bar, counter):
-    """Mengirim dan menghapus pesan secara berurutan sesuai pesan.txt lalu loop ke awal"""
+    """Mengirim dan menghapus pesan secara berurutan dengan retry jika gagal."""
     headers = {"Authorization": token, "Content-Type": "application/json"}
     url = f"https://discord.com/api/v9/channels/{channel_id}/messages"
     
-    pesan_iterator = cycle(pesan_list)  # Iterasi siklis agar kembali ke awal saat habis
+    pesan_iterator = cycle(pesan_list)
+    pesan_gagal_hapus = []
 
     while datetime.now() < waktu_stop:
         if datetime.now() < waktu_mulai:
             await asyncio.sleep(1)
             continue
 
-        pesan = next(pesan_iterator)  # Ambil pesan dari iterator siklis
+        pesan = next(pesan_iterator)
         data = {"content": pesan}
 
-        async with session.post(url, headers=headers, json=data) as response:
-            if response.status == 200:
-                message_id = (await response.json())["id"]
-                log_message("info", f"{nama_token}: 📩 Pesan terkirim - {pesan}")
-                counter[nama_token] += 1
-                progress_bar.update(1)
-
-                await asyncio.sleep(waktu_hapus)
-
-                # Menghapus pesan
-                delete_url = f"{url}/{message_id}"
-                async with session.delete(delete_url, headers=headers) as del_response:
-                    if del_response.status == 204:
-                        log_message("info", f"{nama_token}: 🗑️ Pesan dihapus")
-                    else:
-                        log_message("error", f"{nama_token}: ❌ Gagal menghapus pesan")
-
+        # Retry pengiriman pesan jika gagal
+        for attempt in range(3):  # Coba maksimal 3 kali
+            async with session.post(url, headers=headers, json=data) as response:
+                if response.status == 200:
+                    message_id = (await response.json())["id"]
+                    log_message("info", f"{nama_token}: 📩 Pesan terkirim - {pesan}")
+                    counter[nama_token] += 1
+                    progress_bar.update(1)
+                    break
+                else:
+                    log_message("error", f"{nama_token}: ❌ Gagal mengirim pesan (Status: {response.status}) - Percobaan {attempt + 1}")
+                    await asyncio.sleep(2)  # Tunggu sebelum mencoba lagi
             else:
-                log_message("error", f"{nama_token}: ❌ Gagal mengirim pesan (Status: {response.status})")
+                continue  # Jika semua percobaan gagal, lanjut ke pesan berikutnya
+
+        await asyncio.sleep(waktu_hapus)
+
+        # Coba hapus pesan yang baru dikirim
+        delete_url = f"{url}/{message_id}"
+        for attempt in range(3):  # Coba maksimal 3 kali
+            async with session.delete(delete_url, headers=headers) as del_response:
+                if del_response.status == 204:
+                    log_message("info", f"{nama_token}: 🗑️ Pesan dihapus")
+                    break
+                else:
+                    log_message("error", f"{nama_token}: ❌ Gagal menghapus pesan - Percobaan {attempt + 1}")
+                    await asyncio.sleep(2)  # Tunggu sebelum mencoba lagi
+            else:
+                # Jika gagal dihapus setelah 3 kali coba, simpan ID-nya
+                pesan_gagal_hapus.append(message_id)
 
         await asyncio.sleep(waktu_kirim)
 
+    # Coba hapus pesan yang gagal dihapus sebelumnya
+    for message_id in pesan_gagal_hapus:
+        delete_url = f"{url}/{message_id}"
+        async with session.delete(delete_url, headers=headers) as del_response:
+            if del_response.status == 204:
+                log_message("info", f"{nama_token}: 🗑️ Pesan lama berhasil dihapus")
+            else:
+                log_message("error", f"{nama_token}: ❌ Masih gagal menghapus pesan {message_id}")
+
 async def main():
     try:
-        # Baca file pesan
         with open("pesan.txt", "r") as f:
             pesan_list = [line.strip() for line in f.readlines()]
         if not pesan_list:
             raise ValueError("⚠️ File pesan.txt kosong!")
 
-        # Baca file token
         with open("token.txt", "r") as f:
             tokens = [line.strip().split(":") for line in f.readlines() if ":" in line]
         if not tokens:
@@ -95,12 +114,10 @@ async def main():
 
         log_message("info", "🔍 Memeriksa validitas token...")
 
-        # Validasi token sebelum lanjut ke input berikutnya
         if not await validasi_token(tokens):
             log_message("error", "🚨 Beberapa token tidak valid. Harap perbaiki token.txt dan coba lagi.")
             return
 
-        # Input pengguna setelah token valid
         channel_id = input("🔹 Masukkan ID channel: ").strip()
         if not channel_id.isdigit():
             raise ValueError("⚠️ Channel ID harus angka!")
@@ -110,7 +127,6 @@ async def main():
         if waktu_hapus < 0.01 or waktu_kirim < 0.01:
             raise ValueError("⚠️ Waktu minimal adalah 0.01 detik!")
 
-        # Minta waktu mulai dan waktu berhenti untuk setiap token
         waktu_mulai_dict = {}
         waktu_stop_dict = {}
         counter = {nama_token: 0 for nama_token, _ in tokens}
@@ -131,24 +147,13 @@ async def main():
 
     log_message("info", "🚀 Memulai pengiriman pesan...")
 
-    # Progress bar
-    total_pesan = sum(
-        (waktu_stop_dict[nama_token] - waktu_mulai_dict[nama_token]).total_seconds() // (waktu_kirim + waktu_hapus)
-        for nama_token, _ in tokens
-    )
-    with tqdm(total=int(total_pesan), desc="📩 Progres Pengiriman") as progress_bar:
+    with tqdm(total=100, desc="📩 Progres Pengiriman") as progress_bar:
         async with aiohttp.ClientSession() as session:
             tasks = [
                 asyncio.create_task(kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token], progress_bar, counter))
                 for nama_token, token in tokens
             ]
             await asyncio.gather(*tasks, return_exceptions=True)
-
-    # Menampilkan ringkasan akhir
-    log_message("info", "🎉 Semua token telah selesai!")
-    log_message("info", "\n📊 **Ringkasan Pengiriman:**")
-    for nama_token, jumlah in counter.items():
-        log_message("info", f"🔹 {nama_token}: {jumlah} pesan terkirim")
 
 if __name__ == "__main__":
     asyncio.run(main())
