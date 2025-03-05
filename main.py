@@ -22,75 +22,25 @@ def log_message(level, message):
     logging.log(getattr(logging, level.upper()), message)
     print(f"{color}{message}{Style.RESET_ALL}")
 
-async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, progress_bar, counter):
-    """Mengirim dan menghapus pesan pada channel tertentu menggunakan token secara asynchronous."""
+async def cek_token(session, nama_token, token):
+    """Mengecek apakah token valid dengan mencoba request ke API Discord."""
     headers = {"Authorization": token}
-    max_retries = 5
+    async with session.get("https://discord.com/api/v9/users/@me", headers=headers) as response:
+        if response.status == 200:
+            log_message("info", f"{nama_token}: ✅ Token valid")
+            return True
+        else:
+            log_message("error", f"{nama_token}: ❌ Token tidak valid (Status: {response.status})")
+            return False
 
-    # Tunggu hingga waktu mulai
-    waktu_tunggu = (waktu_mulai - datetime.now()).total_seconds()
-    if waktu_tunggu > 0:
-        log_message("info", f"{nama_token}: ⏳ Menunggu hingga {waktu_mulai.strftime('%H:%M:%S')}")
-        await asyncio.sleep(waktu_tunggu)  # Ini tetap pakai await karena hanya sekali
+async def validasi_token(tokens):
+    """Memeriksa semua token sebelum melanjutkan program."""
+    async with aiohttp.ClientSession() as session:
+        hasil_validasi = await asyncio.gather(
+            *(cek_token(session, nama_token, token) for nama_token, token in tokens)
+        )
+    return all(hasil_validasi)  # Jika ada token yang salah, return False
 
-    log_message("info", f"{nama_token}: ▶️ Mulai mengirim pesan pada {waktu_mulai.strftime('%H:%M:%S')}")
-
-    while datetime.now() < waktu_stop:
-        try:
-            payload = {"content": random.choice(pesan_list)}
-            async with session.post(
-                f"https://discord.com/api/v9/channels/{channel_id}/messages",
-                json=payload,
-                headers=headers,
-            ) as send_response:
-                if send_response.status == 200:
-                    message_data = await send_response.json()
-                    message_id = message_data["id"]
-                    counter[nama_token] += 1
-                    log_message("info", f"{nama_token}: ✅ Pesan ke-{counter[nama_token]} dikirim: {payload['content']} (ID: {message_id})")
-                elif send_response.status == 429:
-                    retry_after = (await send_response.json()).get("retry_after", 1)
-                    log_message("warning", f"{nama_token}: ⏳ Rate limit! Tunggu {retry_after:.2f} detik.")
-                    await asyncio.sleep(retry_after)
-                    continue
-                else:
-                    log_message("error", f"{nama_token}: ❌ Gagal kirim pesan ({send_response.status})")
-                    break
-
-            # Hapus pesan
-            hapus_task = asyncio.create_task(asyncio.sleep(waktu_hapus))  # Tidak memblokir eksekusi task lain
-            await hapus_task  
-
-            retries = 0
-            while retries < max_retries and message_id:
-                async with session.delete(
-                    f"https://discord.com/api/v9/channels/{channel_id}/messages/{message_id}",
-                    headers=headers,
-                ) as delete_response:
-                    if delete_response.status == 204:
-                        log_message("info", f"{nama_token}: 🗑️ Pesan ke-{counter[nama_token]} ({message_id}) dihapus")
-                        break
-                    elif delete_response.status == 429:
-                        retry_after = (await delete_response.json()).get("retry_after", 1)
-                        log_message("warning", f"{nama_token}: ⏳ Rate limit saat hapus! Tunggu {retry_after:.2f} detik.")
-                        await asyncio.sleep(retry_after)
-                        continue
-                    else:
-                        retries += 1
-                        log_message("warning", f"{nama_token}: ⚠️ Gagal hapus pesan (Percobaan {retries})")
-                        await asyncio.sleep(1)
-
-            if retries == max_retries and message_id:
-                log_message("error", f"{nama_token}: ❌ Gagal hapus pesan {message_id} setelah {max_retries} percobaan.")
-
-            kirim_task = asyncio.create_task(asyncio.sleep(waktu_kirim))  # Tidak memblokir task lain
-            await kirim_task  
-            progress_bar.update(1)
-
-        except Exception as e:
-            log_message("error", f"{nama_token}: 🚨 Error: {e}")
-
-    log_message("info", f"{nama_token}: ⏹️ Waktu habis, berhenti mengirim pesan. Total terkirim: {counter[nama_token]}")
 async def main():
     try:
         # Baca file pesan
@@ -105,7 +55,14 @@ async def main():
         if not tokens:
             raise ValueError("⚠️ File token.txt kosong!")
 
-        # Input pengguna
+        log_message("info", "🔍 Memeriksa validitas token...")
+
+        # Validasi token sebelum lanjut ke input berikutnya
+        if not await validasi_token(tokens):
+            log_message("error", "🚨 Beberapa token tidak valid. Harap perbaiki token.txt dan coba lagi.")
+            return
+
+        # Input pengguna setelah token valid
         channel_id = input("🔹 Masukkan ID channel: ").strip()
         if not channel_id.isdigit():
             raise ValueError("⚠️ Channel ID harus angka!")
