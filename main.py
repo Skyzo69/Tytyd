@@ -6,6 +6,7 @@ import asyncio
 from colorama import Fore, Style
 from datetime import datetime, timedelta
 from tqdm import tqdm
+from tqdm.asyncio import tqdm as async_tqdm  # Import tqdm untuk asyncio
 from itertools import cycle  # Untuk iterasi siklis
 
 # Konfigurasi logging ke file
@@ -60,9 +61,9 @@ async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_
         async with session.post(url, headers=headers, json=data) as response:    
             if response.status == 200:    
                 message_id = (await response.json())["id"]    
-                log_message("info", f"{nama_token}: 📩 Pesan terkirim - ID: {message_id} - {pesan}")    
-                counter[nama_token] += 1    
-                progress_bar.update(1)    
+                counter[nama_token] += 1  # Increment counter sebelum log
+                log_message("info", f"{nama_token}: 📩 Pesan ke {counter[nama_token]} terkirim - ID: {message_id} - {pesan}")    
+                progress_bar.update(1)  # Perbarui progress bar
 
                 await asyncio.sleep(waktu_hapus)    
 
@@ -71,14 +72,16 @@ async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_
                 for i in range(3):
                     async with session.delete(delete_url, headers=headers) as del_response:    
                         if del_response.status == 204:    
-                            log_message("info", f"{nama_token}: 🗑️ Pesan dihapus - ID: {message_id}")    
+                            log_message("info", f"{nama_token}: 🗑️ Pesan ke {counter[nama_token]} dihapus - ID: {message_id}")    
+                            break
+                        elif del_response.status == 404:  # Tangani 404 sebagai sukses
+                            log_message("info", f"{nama_token}: ℹ️ Pesan ke {counter[nama_token]} sudah dihapus - ID: {message_id}")    
                             break
                         else:    
-                            log_message("warning", f"{nama_token}: ⚠️ Gagal menghapus pesan (Percobaan {i+1})")    
+                            log_message("warning", f"{nama_token}: ⚠️ Gagal menghapus pesan ke {counter[nama_token]} (Percobaan {i+1}, Status: {del_response.status})")    
                             await asyncio.sleep(1)  # Tunggu 1 detik sebelum retry
-
-                    if i == 2:  # Jika masih gagal setelah 3 kali
-                        log_message("error", f"{nama_token}: ❌ Gagal menghapus pesan setelah 3 percobaan - ID: {message_id}")    
+                else:  # Jika semua percobaan gagal
+                    log_message("error", f"{nama_token}: ❌ Gagal menghapus pesan ke {counter[nama_token]} setelah 3 percobaan - ID: {message_id}")
 
             else:    
                 log_message("error", f"{nama_token}: ❌ Gagal mengirim pesan (Status: {response.status})")    
@@ -137,12 +140,12 @@ async def main():
 
     log_message("info", "🚀 Memulai pengiriman pesan...")
 
-    # Progress bar
+    # Progress bar dengan dukungan asyncio
     total_pesan = sum(
         (waktu_stop_dict[nama_token] - waktu_mulai_dict[nama_token]).total_seconds() // (waktu_kirim + waktu_hapus)
         for nama_token, _ in tokens
     )
-    with tqdm(total=int(total_pesan), desc="📩 Progres Pengiriman") as progress_bar:
+    async with async_tqdm(total=int(total_pesan), desc="📩 Progres Pengiriman") as progress_bar:
         async with aiohttp.ClientSession() as session:
             tasks = [
                 asyncio.create_task(kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token], progress_bar, counter))
