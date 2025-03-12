@@ -6,7 +6,6 @@ import asyncio
 from colorama import Fore, Style
 from datetime import datetime, timedelta
 from tqdm import tqdm
-from tqdm.asyncio import tqdm as async_tqdm  # Import tqdm untuk asyncio
 from itertools import cycle  # Untuk iterasi siklis
 
 # Konfigurasi logging ke file
@@ -63,7 +62,7 @@ async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_
                 message_id = (await response.json())["id"]    
                 counter[nama_token] += 1  # Increment counter sebelum log
                 log_message("info", f"{nama_token}: 📩 Pesan ke {counter[nama_token]} terkirim - ID: {message_id} - {pesan}")    
-                progress_bar.update(1)  # Perbarui progress bar
+                progress_bar.update(1)    
 
                 await asyncio.sleep(waktu_hapus)    
 
@@ -140,12 +139,12 @@ async def main():
 
     log_message("info", "🚀 Memulai pengiriman pesan...")
 
-    # Progress bar dengan dukungan asyncio
+    # Progress bar
     total_pesan = sum(
         (waktu_stop_dict[nama_token] - waktu_mulai_dict[nama_token]).total_seconds() // (waktu_kirim + waktu_hapus)
         for nama_token, _ in tokens
     )
-    async with async_tqdm(total=int(total_pesan), desc="📩 Progres Pengiriman") as progress_bar:
+    with tqdm(total=int(total_pesan), desc="📩 Progres Pengiriman") as progress_bar:
         async with aiohttp.ClientSession() as session:
             tasks = [
                 asyncio.create_task(kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token], progress_bar, counter))
