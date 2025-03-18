@@ -42,7 +42,17 @@ async def validasi_token(tokens):
         )
     return all(hasil_validasi)  # Jika ada token yang salah, return False
 
-async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, progress_bar, counter):
+async def leave_thread(session, channel_id, nama_token, token):
+    """Meninggalkan thread channel setelah selesai."""
+    headers = {"Authorization": token}
+    url = f"https://discord.com/api/v9/channels/{channel_id}/thread-members/@me"
+    async with session.delete(url, headers=headers) as response:
+        if response.status == 204:
+            log_message("info", f"{nama_token}: 🚪 Berhasil meninggalkan thread channel {channel_id}")
+        else:
+            log_message("warning", f"{nama_token}: ⚠️ Gagal meninggalkan thread channel {channel_id} (Status: {response.status})")
+
+async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, progress_bar, counter, leave_on_complete):
     """Mengirim dan menghapus pesan secara berurutan sesuai pesan.txt lalu loop ke awal"""
     headers = {"Authorization": token, "Content-Type": "application/json"}
     url = f"https://discord.com/api/v9/channels/{channel_id}/messages"
@@ -87,6 +97,10 @@ async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_
 
         await asyncio.sleep(waktu_kirim)
 
+    # Jika opsi leave thread diaktifkan, tinggalkan thread setelah selesai
+    if leave_on_complete:
+        await leave_thread(session, channel_id, nama_token, token)
+
 async def main():
     try:
         # Baca file pesan
@@ -118,6 +132,10 @@ async def main():
         if waktu_hapus < 0.01 or waktu_kirim < 0.01:    
             raise ValueError("⚠️ Waktu minimal adalah 0.01 detik!")    
 
+        # Tanya apakah ingin leave thread setelah selesai
+        leave_choice = input("🚪 Ingin leave thread setelah selesai untuk setiap token? (y/n): ").strip().lower()
+        leave_on_complete = leave_choice == 'y'
+
         # Minta waktu mulai dan waktu berhenti untuk setiap token    
         waktu_mulai_dict = {}    
         waktu_stop_dict = {}    
@@ -147,7 +165,7 @@ async def main():
     with tqdm(total=int(total_pesan), desc="📩 Progres Pengiriman") as progress_bar:
         async with aiohttp.ClientSession() as session:
             tasks = [
-                asyncio.create_task(kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token], progress_bar, counter))
+                asyncio.create_task(kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token], progress_bar, counter, leave_on_complete))
                 for nama_token, token in tokens
             ]
             await asyncio.gather(*tasks, return_exceptions=True)
