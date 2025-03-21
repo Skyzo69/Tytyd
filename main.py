@@ -129,13 +129,15 @@ async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, w
 
                             delete_url = f"{url}/{message_id}"
                             for i in range(3):
+                                start_time = time.time()  # Mulai pengukuran waktu penghapusan
                                 async with session.delete(delete_url, headers=headers) as del_response:
+                                    elapsed_time = time.time() - start_time  # Hitung waktu yang diperlukan untuk penghapusan
                                     if del_response.status == 204:
-                                        log_message(nama_token, "info", f"🗑️ Pesan ke-{counter[nama_token]} dihapus (ID: {message_id})")
+                                        log_message(nama_token, "info", f"🗑️ Pesan ke-{counter[nama_token]} dihapus (ID: {message_id}) - {elapsed_time:.2f} detik")
                                         cycle_completion_event[nama_token].set()
                                         break
                                     elif del_response.status == 404:
-                                        log_message(nama_token, "info", f"ℹ️ Pesan ke-{counter[nama_token]} sudah dihapus (ID: {message_id})")
+                                        log_message(nama_token, "info", f"ℹ️ Pesan ke-{counter[nama_token]} sudah dihapus (ID: {message_id}) - {elapsed_time:.2f} detik")
                                         cycle_completion_event[nama_token].set()
                                         break
                                     elif del_response.status == 429:
@@ -192,22 +194,23 @@ async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu
     cycle_count = 0  # Penghitung siklus
     while True:
         active_tokens = [nama for nama, event in cycle_completion_event.items() if datetime.now() >= waktu_mulai_dict[nama] and datetime.now() < waktu_stop_dict[nama]]
-        if active_tokens:
-            await asyncio.gather(*(event.wait() for nama, event in cycle_completion_event.items() if nama in active_tokens))
-            cycle_count += 1  # Tambah nomor siklus
-            # Hitung persentase berdasarkan token dengan waktu_stop terakhir
-            waktu_sekarang = datetime.now()
-            waktu_stop_terakhir = max(waktu_stop_dict.values())
-            waktu_mulai_pertama = min(waktu_mulai_dict.values())
-            total_durasi = (waktu_stop_terakhir - waktu_mulai_pertama).total_seconds()
-            durasi_berlalu = (waktu_sekarang - waktu_mulai_pertama).total_seconds()
-            persentase = min(100, max(0, (durasi_berlalu / total_durasi) * 100)) if total_durasi > 0 else 0
-            
-            print(f"{Fore.CYAN}┌────────────────────────────┐{Style.RESET_ALL}")
-            print(f"{Fore.CYAN}│ Siklus {cycle_count} ({persentase:.1f}% selesai)   │{Style.RESET_ALL}")
-            print(f"{Fore.CYAN}└────────────────────────────┘{Style.RESET_ALL}")
-            for event in cycle_completion_event.values():
-                event.clear()
+        if not active_tokens:  # Jika tidak ada token aktif lagi, keluar dari loop
+            break
+        await asyncio.gather(*(event.wait() for nama, event in cycle_completion_event.items() if nama in active_tokens))
+        cycle_count += 1  # Tambah nomor siklus
+        # Hitung persentase berdasarkan token dengan waktu_stop terakhir
+        waktu_sekarang = datetime.now()
+        waktu_stop_terakhir = max(waktu_stop_dict.values())
+        waktu_mulai_pertama = min(waktu_mulai_dict.values())
+        total_durasi = (waktu_stop_terakhir - waktu_mulai_pertama).total_seconds()
+        durasi_berlalu = (waktu_sekarang - waktu_mulai_pertama).total_seconds()
+        persentase = min(100, max(0, (durasi_berlalu / total_durasi) * 100)) if total_durasi > 0 else 0
+        
+        print(f"{Fore.CYAN}┌────────────────────────────┐{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}│ Siklus {cycle_count} ({persentase:.1f}% selesai)   │{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}└────────────────────────────┘{Style.RESET_ALL}")
+        for event in cycle_completion_event.values():
+            event.clear()
         await asyncio.sleep(1)
 
 async def main():
