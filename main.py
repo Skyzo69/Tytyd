@@ -261,7 +261,10 @@ async def main():
 
         print(f"{Fore.YELLOW}--- Memulai Pengiriman Pesan ---{Style.RESET_ALL}")
         semaphore = asyncio.Semaphore(100)
-        with tqdm(total=total_estimated_messages, desc="📩 Progres Pengiriman", unit="pesan") as progress_bar:
+        # Initialize tqdm with position=1 to place it on a new line, and leave=True to keep it after completion
+        with tqdm(total=total_estimated_messages, desc="📩 Progres Pengiriman", unit="pesan", position=1, leave=True) as progress_bar:
+            # Print a newline before starting tasks to ensure separation
+            print()
             async with aiohttp.ClientSession() as session:
                 tasks = [
                     asyncio.create_task(kirim_pesan(
