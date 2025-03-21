@@ -192,33 +192,57 @@ async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, w
 async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu_stop_dict):
     """Monitor siklus pengiriman dan penghapusan pesan untuk semua token dan tampilkan persentase dengan nomor siklus."""
     cycle_count = 0  # Penghitung siklus
-    while True:
-        active_tokens = [nama for nama, event in cycle_completion_event.items() if datetime.now() >= waktu_mulai_dict[nama] and datetime.now() < waktu_stop_dict[nama]]
-        if not active_tokens:  # Jika tidak ada token aktif lagi, keluar dari loop
-            print(f"{Fore.YELLOW}⏹️ Semua tugas pengiriman selesai, monitor siklus berhenti.{Style.RESET_ALL}")
-            break
-        try:
-            await asyncio.wait_for(
-                asyncio.gather(*(event.wait() for nama, event in cycle_completion_event.items() if nama in active_tokens)),
-                timeout=60  # Timeout untuk mencegah stuck
-            )
-            cycle_count += 1  # Tambah nomor siklus
-            # Hitung persentase berdasarkan token dengan waktu_stop terakhir
-            waktu_sekarang = datetime.now()
-            waktu_stop_terakhir = max(waktu_stop_dict.values())
-            waktu_mulai_pertama = min(waktu_mulai_dict.values())
-            total_durasi = (waktu_stop_terakhir - waktu_mulai_pertama).total_seconds()
-            durasi_berlalu = (waktu_sekarang - waktu_mulai_pertama).total_seconds()
-            persentase = min(100, max(0, (durasi_berlalu / total_durasi) * 100)) if total_durasi > 0 else 0
-            
-            print(f"{Fore.CYAN}┌────────────────────────────┐{Style.RESET_ALL}")
-            print(f"{Fore.CYAN}│ Siklus {cycle_count} ({persentase:.1f}% selesai)   │{Style.RESET_ALL}")
-            print(f"{Fore.CYAN}└────────────────────────────┘{Style.RESET_ALL}")
-            for event in cycle_completion_event.values():
-                event.clear()
-        except asyncio.TimeoutError:
-            print(f"{Fore.YELLOW}⚠️ Timeout di monitor siklus, memeriksa ulang token aktif...{Style.RESET_ALL}")
-            continue
+    # Tentukan waktu stop terakhir dari semua token
+    waktu_stop_terakhir = max(waktu_stop_dict.values())
+
+    while datetime.now() < waktu_stop_terakhir:  # Berhenti hanya jika semua token selesai
+        # Token yang aktif: sudah mulai dan belum selesai
+        active_tokens = [
+            nama for nama, event in cycle_completion_event.items()
+            if datetime.now() >= waktu_mulai_dict[nama] and datetime.now() < waktu_stop_dict[nama]
+        ]
+
+        # Token yang sedang mengirim pesan: sudah melewati waktu mulai
+        sending_tokens = [
+            nama for nama in active_tokens
+            if datetime.now() >= waktu_mulai_dict[nama]
+        ]
+
+        if not active_tokens:
+            # Jika tidak ada token aktif, periksa apakah semua token sudah selesai
+            all_finished = all(datetime.now() >= waktu_stop_dict[nama] for nama in waktu_stop_dict)
+            if all_finished:
+                print(f"{Fore.YELLOW}⏹️ Semua tugas pengiriman selesai, monitor siklus berhenti.{Style.RESET_ALL}")
+                break
+            else:
+                # Jika ada token yang belum mulai, tunggu sebentar dan lanjutkan
+                await asyncio.sleep(1)
+                continue
+
+        if sending_tokens:  # Hanya tunggu event jika ada token yang sedang mengirim
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*(cycle_completion_event[nama].wait() for nama in sending_tokens)),
+                    timeout=60  # Timeout untuk mencegah stuck
+                )
+                cycle_count += 1  # Tambah nomor siklus
+                # Hitung persentase berdasarkan token dengan waktu_stop terakhir
+                waktu_sekarang = datetime.now()
+                waktu_stop_terakhir = max(waktu_stop_dict.values())
+                waktu_mulai_pertama = min(waktu_mulai_dict.values())
+                total_durasi = (waktu_stop_terakhir - waktu_mulai_pertama).total_seconds()
+                durasi_berlalu = (waktu_sekarang - waktu_mulai_pertama).total_seconds()
+                persentase = min(100, max(0, (durasi_berlalu / total_durasi) * 100)) if total_durasi > 0 else 0
+                
+                print(f"{Fore.CYAN}┌────────────────────────────┐{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}│ Siklus {cycle_count} ({persentase:.1f}% selesai)   │{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}└────────────────────────────┘{Style.RESET_ALL}")
+                for nama in sending_tokens:
+                    cycle_completion_event[nama].clear()
+            except asyncio.TimeoutError:
+                print(f"{Fore.YELLOW}⚠️ Timeout di monitor siklus, memeriksa ulang token aktif...{Style.RESET_ALL}")
+                continue
+
         await asyncio.sleep(1)
 
 async def main():
