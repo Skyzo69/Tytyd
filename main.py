@@ -99,7 +99,7 @@ async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_
                                 else:    
                                     log_message("warning", f"{nama_token}: ⚠️ Gagal menghapus pesan ke {counter[nama_token]} (Percobaan {i+1}, Status: {del_response.status})")    
                                     await asyncio.sleep(1)  # Tunggu 1 detik sebelum retry
-                            else:  # Jika semua percobaan gagal
+                            else:  
                                 log_message("error", f"{nama_token}: ❌ Gagal menghapus pesan ke {counter[nama_token]} setelah 3 percobaan - ID: {message_id}")
 
                     else:    
