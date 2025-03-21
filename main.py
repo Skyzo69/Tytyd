@@ -103,7 +103,7 @@ async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, w
                         if response.status == 200:
                             message_id = (await response.json())["id"]
                             counter[nama_token] += 1
-                            log_message(nama_token, "info", f"✉️ Pesan ke-{counter[nama_token]} terkirim (ID: {message_id}) - {pesan}")
+                            log_message(nama_token, "info", f"📩 Pesan ke-{counter[nama_token]} terkirim (ID: {message_id}) - {pesan}")
 
                             await asyncio.sleep(waktu_hapus)
 
