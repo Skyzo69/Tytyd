@@ -3,10 +3,13 @@ import time
 import logging
 import aiohttp
 import asyncio
-from colorama import Fore, Style
+from colorama import Fore, Style, init
 from datetime import datetime, timedelta
 from itertools import cycle
 from tabulate import tabulate  # Untuk tabel ringkasan
+
+# Inisialisasi colorama untuk mendukung warna di Windows Command Prompt
+init(autoreset=True)
 
 # Konfigurasi logging ke file
 logging.basicConfig(
