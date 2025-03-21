@@ -166,8 +166,8 @@ async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu
     """Monitor siklus pengiriman dan penghapusan pesan untuk semua token dan tampilkan pesan saat ini/estimasi pesan."""
     waktu_stop_terakhir = max(waktu_stop_dict.values())
     waktu_mulai_pertama = min(waktu_mulai_dict.values())
-    # Lebar kotak tetap
-    box_width = 30  # Lebar total kotak (termasuk border)
+    # Lebar kotak diperbesar untuk menampung angka 4 digit
+    box_width = 36  # Lebar total kotak (termasuk border), sebelumnya 30
 
     while datetime.now() < waktu_stop_terakhir:  # Berhenti hanya jika semua token selesai
         # Token yang aktif: belum selesai (waktu sekarang < waktu_stop)
