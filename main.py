@@ -167,7 +167,7 @@ async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu
     cycle_count = 0  # Penghitung siklus
     waktu_stop_terakhir = max(waktu_stop_dict.values())
     waktu_mulai_pertama = min(waktu_mulai_dict.values())
-    timeout_duration = 10  # Timeout 10 detik
+    timeout_duration = 61  # Timeout 10 detik
     last_cycle_update = time.time()  # Waktu terakhir siklus diperbarui
 
     while datetime.now() < waktu_stop_terakhir:  # Berhenti hanya jika semua token selesai
