@@ -276,6 +276,9 @@ async def main():
             waktu_stop_dict[nama_token] = waktu_stop
 
         print(f"{Fore.YELLOW}--- Memulai Pengiriman Pesan ---{Style.RESET_ALL}")
+        # Hitung waktu stop terakhir untuk estimasi selesai
+        waktu_stop_terakhir = max(waktu_stop_dict.values())
+        print(f"{Fore.CYAN}⏰ Estimasi skrip selesai pada: {waktu_stop_terakhir.strftime('%Y-%m-%d %H:%M:%S')}{Style.RESET_ALL}")
         semaphore = asyncio.Semaphore(100)
         print()
         async with aiohttp.ClientSession() as session:
