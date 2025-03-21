@@ -5,7 +5,6 @@ import aiohttp
 import asyncio
 from colorama import Fore, Style
 from datetime import datetime, timedelta
-from tqdm import tqdm
 from itertools import cycle
 from tabulate import tabulate  # Untuk tabel ringkasan
 
@@ -91,7 +90,7 @@ async def perbarui_token(nama_token, tokens_dict):
         log_message(nama_token, "error", f"❌ Gagal memperbarui token - {str(e)}")
         return None
 
-async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, progress_bar, counter, leave_on_complete, tokens_dict, semaphore):
+async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, counter, leave_on_complete, tokens_dict, semaphore, cycle_completion_event):
     """Mengirim dan menghapus pesan secara berurutan sesuai pesan.txt lalu loop ke awal"""
     async with semaphore:
         headers = {"Authorization": token_dict["token"], "Content-Type": "application/json"}
@@ -122,7 +121,6 @@ async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, w
                             message_id = (await response.json())["id"]
                             counter[nama_token] += 1
                             log_message(nama_token, "info", f"📩 Pesan ke-{counter[nama_token]} terkirim (ID: {message_id}) - {pesan}")
-                            progress_bar.update(1)
 
                             await asyncio.sleep(waktu_hapus)
 
@@ -131,12 +129,14 @@ async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, w
                                 async with session.delete(delete_url, headers=headers) as del_response:
                                     if del_response.status == 204:
                                         log_message(nama_token, "info", f"🗑️ Pesan ke-{counter[nama_token]} dihapus (ID: {message_id})")
+                                        cycle_completion_event[nama_token].set()
                                         break
                                     elif del_response.status == 404:
                                         log_message(nama_token, "info", f"ℹ️ Pesan ke-{counter[nama_token]} sudah dihapus (ID: {message_id})")
+                                        cycle_completion_event[nama_token].set()
                                         break
                                     elif del_response.status == 429:
-                                        retry_after = float(del_response.headers.get("Retry-After", 5))
+                                        retry_after = float(response.headers.get("Retry-After", 5))
                                         log_message(nama_token, "warning", f"⏳ Rate limit saat hapus, menunggu {retry_after} detik")
                                         await asyncio.sleep(retry_after)
                                     else:
@@ -167,7 +167,7 @@ async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, w
 
                 except aiohttp.ClientConnectionError as e:
                     log_message(nama_token, "error", f"❌ Koneksi gagal - {str(e)}, membuat ulang session")
-                    return await kirim_pesan(aiohttp.ClientSession(), channel_id, nama_token, token_dict, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, progress_bar, counter, leave_on_complete, tokens_dict, semaphore)
+                    return await kirim_pesan(aiohttp.ClientSession(), channel_id, nama_token, token_dict, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, counter, leave_on_complete, tokens_dict, semaphore, cycle_completion_event)
                 except aiohttp.ClientError as e:
                     log_message(nama_token, "error", f"❌ Kesalahan jaringan - {str(e)}")
                     await asyncio.sleep(1)
@@ -184,12 +184,37 @@ async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, w
 
         log_message(nama_token, "info", "⏹️ Tugas pengiriman pesan selesai")
 
+async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu_stop_dict):
+    """Monitor siklus pengiriman dan penghapusan pesan untuk semua token dan tampilkan persentase dengan nomor siklus."""
+    cycle_count = 0  # Penghitung siklus
+    while True:
+        active_tokens = [nama for nama, event in cycle_completion_event.items() if datetime.now() >= waktu_mulai_dict[nama] and datetime.now() < waktu_stop_dict[nama]]
+        if active_tokens:
+            await asyncio.gather(*(event.wait() for nama, event in cycle_completion_event.items() if nama in active_tokens))
+            cycle_count += 1  # Tambah nomor siklus
+            # Hitung persentase berdasarkan token dengan waktu_stop terakhir
+            waktu_sekarang = datetime.now()
+            waktu_stop_terakhir = max(waktu_stop_dict.values())
+            waktu_mulai_pertama = min(waktu_mulai_dict.values())
+            total_durasi = (waktu_stop_terakhir - waktu_mulai_pertama).total_seconds()
+            durasi_berlalu = (waktu_sekarang - waktu_mulai_pertama).total_seconds()
+            persentase = min(100, max(0, (durasi_berlalu / total_durasi) * 100)) if total_durasi > 0 else 0
+            
+            print(f"{Fore.CYAN}┌────────────────────────────┐{Style.RESET_ALL}")
+            print(f"{Fore.CYAN}│ Siklus {cycle_count} ({persentase:.1f}% selesai)   │{Style.RESET_ALL}")
+            print(f"{Fore.CYAN}└────────────────────────────┘{Style.RESET_ALL}")
+            for event in cycle_completion_event.values():
+                event.clear()
+        await asyncio.sleep(1)
+
 async def main():
+    global waktu_mulai_dict, waktu_stop_dict  # Untuk akses di monitor_cycles
     pesan_list = []
     tokens = []
     tokens_dict = {}
     counter = {}
     tasks = []
+    cycle_completion_event = {}
 
     print(f"{Fore.CYAN}=== Mulai Skrip Pengiriman Pesan ==={Style.RESET_ALL}")
     try:
@@ -230,9 +255,8 @@ async def main():
         waktu_mulai_dict = {}
         waktu_stop_dict = {}
         counter = {nama_token: 0 for nama_token, _ in tokens}
+        cycle_completion_event = {nama_token: asyncio.Event() for nama_token, _ in tokens}
 
-        # Estimate total messages for progress bar
-        estimated_totals = {}
         for nama_token, _ in tokens:
             waktu_mulai_menit_input = input(f"{Fore.CYAN}⏳ Masukkan waktu mulai untuk {nama_token} (menit dari sekarang): {Style.RESET_ALL}").strip()
             waktu_berhenti_menit_input = input(f"{Fore.CYAN}⏰ Masukkan waktu berhenti untuk {nama_token} (menit setelah mulai): {Style.RESET_ALL}").strip()
@@ -248,47 +272,30 @@ async def main():
             waktu_mulai_dict[nama_token] = waktu_mulai
             waktu_stop_dict[nama_token] = waktu_stop
 
-            # Estimate the number of messages for this token
-            duration_seconds = (waktu_stop - waktu_mulai).total_seconds()
-            if duration_seconds > 0:
-                estimated_messages = int(duration_seconds / waktu_kirim)
-            else:
-                estimated_messages = 0
-            estimated_totals[nama_token] = estimated_messages
-
-        # Calculate the total estimated messages for the progress bar
-        total_estimated_messages = sum(estimated_totals.values())
-
         print(f"{Fore.YELLOW}--- Memulai Pengiriman Pesan ---{Style.RESET_ALL}")
         semaphore = asyncio.Semaphore(100)
-        # Initialize tqdm with position=1 to place it on a new line, and leave=True to keep it after completion
-        with tqdm(total=total_estimated_messages, desc="📩 Progres Pengiriman", unit="pesan", position=1, leave=True) as progress_bar:
-            # Print a newline before starting tasks to ensure separation
-            print()
-            async with aiohttp.ClientSession() as session:
-                tasks = [
-                    asyncio.create_task(kirim_pesan(
-                        session, channel_id, nama_token, {"token": token}, pesan_list,
-                        waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token],
-                        progress_bar, counter, leave_on_complete, tokens_dict, semaphore
-                    ))
-                    for nama_token, token in tokens
-                ]
-                try:
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
-                    for (nama_token, _), result in zip(tokens, results):
-                        if isinstance(result, Exception):
-                            log_message(nama_token, "error", f"❌ Tugas gagal - {str(result)}")
-                except KeyboardInterrupt:
-                    print(f"{Fore.YELLOW}⏹️ Pengguna menghentikan skrip, melakukan cleanup...{Style.RESET_ALL}")
-                    for task in tasks:
-                        task.cancel()
-                    await asyncio.gather(*tasks, return_exceptions=True)
+        print()
+        async with aiohttp.ClientSession() as session:
+            tasks = [
+                asyncio.create_task(kirim_pesan(
+                    session, channel_id, nama_token, {"token": token}, pesan_list,
+                    waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token],
+                    counter, leave_on_complete, tokens_dict, semaphore, cycle_completion_event
+                ))
+                for nama_token, token in tokens
+            ]
+            tasks.append(asyncio.create_task(monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu_stop_dict)))
 
-            # Update the progress bar total to the actual number of messages sent
-            actual_total = sum(counter.values())
-            progress_bar.total = actual_total
-            progress_bar.refresh()
+            try:
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                for (nama_token, _), result in zip(tokens, results[:-1]):  # Exclude monitor task
+                    if isinstance(result, Exception):
+                        log_message(nama_token, "error", f"❌ Tugas gagal - {str(result)}")
+            except KeyboardInterrupt:
+                print(f"{Fore.YELLOW}⏹️ Pengguna menghentikan skrip, melakukan cleanup...{Style.RESET_ALL}")
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
 
     except Exception as e:
         print(f"{Fore.RED}🚨 Error selama eksekusi: {str(e)}{Style.RESET_ALL}")
