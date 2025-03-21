@@ -194,30 +194,24 @@ async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu
     cycle_count = 0  # Penghitung siklus
     # Tentukan waktu stop terakhir dari semua token
     waktu_stop_terakhir = max(waktu_stop_dict.values())
+    waktu_mulai_pertama = min(waktu_mulai_dict.values())
 
     while datetime.now() < waktu_stop_terakhir:  # Berhenti hanya jika semua token selesai
-        # Token yang aktif: sudah mulai dan belum selesai
+        # Token yang aktif: belum selesai (waktu sekarang < waktu_stop)
         active_tokens = [
-            nama for nama, event in cycle_completion_event.items()
-            if datetime.now() >= waktu_mulai_dict[nama] and datetime.now() < waktu_stop_dict[nama]
+            nama for nama, _ in tokens
+            if datetime.now() < waktu_stop_dict[nama]
         ]
 
-        # Token yang sedang mengirim pesan: sudah melewati waktu mulai
+        # Token yang sedang mengirim pesan: sudah melewati waktu mulai dan belum selesai
         sending_tokens = [
             nama for nama in active_tokens
             if datetime.now() >= waktu_mulai_dict[nama]
         ]
 
         if not active_tokens:
-            # Jika tidak ada token aktif, periksa apakah semua token sudah selesai
-            all_finished = all(datetime.now() >= waktu_stop_dict[nama] for nama in waktu_stop_dict)
-            if all_finished:
-                print(f"{Fore.YELLOW}⏹️ Semua tugas pengiriman selesai, monitor siklus berhenti.{Style.RESET_ALL}")
-                break
-            else:
-                # Jika ada token yang belum mulai, tunggu sebentar dan lanjutkan
-                await asyncio.sleep(1)
-                continue
+            print(f"{Fore.YELLOW}⏹️ Semua tugas pengiriman selesai, monitor siklus berhenti.{Style.RESET_ALL}")
+            break
 
         if sending_tokens:  # Hanya tunggu event jika ada token yang sedang mengirim
             try:
@@ -228,8 +222,6 @@ async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu
                 cycle_count += 1  # Tambah nomor siklus
                 # Hitung persentase berdasarkan token dengan waktu_stop terakhir
                 waktu_sekarang = datetime.now()
-                waktu_stop_terakhir = max(waktu_stop_dict.values())
-                waktu_mulai_pertama = min(waktu_mulai_dict.values())
                 total_durasi = (waktu_stop_terakhir - waktu_mulai_pertama).total_seconds()
                 durasi_berlalu = (waktu_sekarang - waktu_mulai_pertama).total_seconds()
                 persentase = min(100, max(0, (durasi_berlalu / total_durasi) * 100)) if total_durasi > 0 else 0
