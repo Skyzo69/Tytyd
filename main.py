@@ -96,20 +96,35 @@ async def kirim_pesan(session, channel_id, nama_token, token, pesan_list, waktu_
                                 elif del_response.status == 404:  # Tangani 404 sebagai sukses
                                     log_message("info", f"{nama_token}: ℹ️ Pesan ke {counter[nama_token]} sudah dihapus - ID: {message_id}")    
                                     break
+                                elif del_response.status == 429:  # Tangani rate limit
+                                    retry_after = float(del_response.headers.get("Retry-After", 5))
+                                    log_message("warning", f"{nama_token}: ⏳ Rate limit terdeteksi, menunggu {retry_after} detik")
+                                    await asyncio.sleep(retry_after)
                                 else:    
                                     log_message("warning", f"{nama_token}: ⚠️ Gagal menghapus pesan ke {counter[nama_token]} (Percobaan {i+1}, Status: {del_response.status})")    
                                     await asyncio.sleep(1)  # Tunggu 1 detik sebelum retry
-                                else:  
-                                    log_message("error", f"{nama_token}: ❌ Gagal menghapus pesan ke {counter[nama_token]} setelah 3 percobaan - ID: {message_id}")
+                            else:  # Jika semua percobaan gagal
+                                log_message("error", f"{nama_token}: ❌ Gagal menghapus pesan ke {counter[nama_token]} setelah 3 percobaan - ID: {message_id}")
 
+                    elif response.status == 429:  # Tangani rate limit saat mengirim
+                        retry_after = float(response.headers.get("Retry-After", 5))
+                        log_message("warning", f"{nama_token}: ⏳ Rate limit terdeteksi saat mengirim, menunggu {retry_after} detik")
+                        await asyncio.sleep(retry_after)
+                    elif response.status == 401:  # Token tidak valid
+                        log_message("error", f"{nama_token}: ❌ Token tidak valid (Status: 401), tugas berhenti")
+                        return  # Keluar dari tugas jika token tidak valid
                     else:    
                         log_message("error", f"{nama_token}: ❌ Gagal mengirim pesan (Status: {response.status})")    
+                        await asyncio.sleep(5)  # Jeda untuk kesalahan lain
 
                 await asyncio.sleep(waktu_kirim)
 
+            except aiohttp.ClientError as e:
+                log_message("error", f"{nama_token}: ❌ Kesalahan jaringan saat mengirim/menghapus pesan - {str(e)}")
+                await asyncio.sleep(5)  # Jeda untuk mencoba lagi setelah error jaringan
             except Exception as e:
-                log_message("error", f"{nama_token}: ❌ Kesalahan saat mengirim/menghapus pesan - {str(e)}")
-                await asyncio.sleep(5)  # Jeda sebelum mencoba lagi agar tidak spam saat error
+                log_message("error", f"{nama_token}: ❌ Kesalahan tak terduga saat mengirim/menghapus pesan - {str(e)}")
+                await asyncio.sleep(5)
 
     except Exception as e:
         log_message("error", f"{nama_token}: ❌ Tugas pengiriman pesan berhenti karena kesalahan - {str(e)}")
