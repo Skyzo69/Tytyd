@@ -7,6 +7,7 @@ from colorama import Fore, Style, init
 from datetime import datetime, timedelta
 from itertools import cycle
 from tabulate import tabulate  # Untuk tabel ringkasan
+from pyfiglet import Figlet  # Impor pyfiglet
 
 # Inisialisasi colorama untuk mendukung warna di Windows Command Prompt
 init(autoreset=True)
@@ -236,6 +237,13 @@ async def main():
     tasks = []
     cycle_completion_event = {}
 
+    # Catat waktu mulai script
+    script_start_time = datetime.now()
+
+    # Tampilkan teks "PUSH XP DISCORD" dengan pyfiglet
+    f = Figlet(font='slant')  # Anda bisa mengganti font sesuai keinginan
+    print(f"{Fore.CYAN}{f.renderText('PUSH XP DISCORD')}{Style.RESET_ALL}")
+    
     print(f"{Fore.CYAN}=== Mulai Skrip Pengiriman Pesan ==={Style.RESET_ALL}")
     try:
         with open("pesan.txt", "r") as f:
@@ -294,7 +302,7 @@ async def main():
         print(f"{Fore.YELLOW}--- Memulai Pengiriman Pesan ---{Style.RESET_ALL}")
         # Hitung waktu stop terakhir untuk estimasi selesai dan tampilkan
         waktu_stop_terakhir = max(waktu_stop_dict.values())
-        print(f"{Fore.CYAN}⏰ Estimasi skrip selesai pada: {waktu_stop_terakhir.strftime('%Y-%m-%d %H:%M:%S')}{Style.RESET_ALL}")
+        print(f"{Fore.MAGENTA}⏰ Estimasi skrip selesai pada: {waktu_stop_terakhir.strftime('%Y-%m-%d %H:%M:%S')}{Style.RESET_ALL}")
         semaphore = asyncio.Semaphore(100)
         print()
         async with aiohttp.ClientSession() as session:
@@ -330,9 +338,51 @@ async def main():
             durasi_total_detik = (waktu_stop_dict[nama_token] - waktu_mulai_dict[nama_token]).total_seconds()
             estimasi_pesan = int(durasi_total_detik / waktu_kirim) if waktu_kirim > 0 else 0
             jumlah = counter[nama_token]
-            table_data.append([nama_token, f"{jumlah}/{estimasi_pesan} pesan"])
-        print(tabulate(table_data, headers=["Token", "Jumlah Pesan Terkirim"], tablefmt="grid"))
-        print(f"{Fore.CYAN}=== Proses Selesai (Normal atau Dihentikan) ==={Style.RESET_ALL}")
+            # Format dengan warna
+            colored_token = f"{Fore.GREEN}{nama_token}{Style.RESET_ALL}"
+            colored_pesan = f"{Fore.BLUE}{jumlah}/{estimasi_pesan} pesan{Style.RESET_ALL}"
+            table_data.append([colored_token, colored_pesan])
+        print(tabulate(table_data, headers=[
+            f"{Fore.CYAN}Token{Style.RESET_ALL}",
+            f"{Fore.CYAN}Jumlah Pesan Terkirim{Style.RESET_ALL}"
+        ], tablefmt="grid"))
+
+        # Hitung waktu selesai dan durasi
+        script_end_time = datetime.now()
+        duration = script_end_time - script_start_time
+        duration_seconds = duration.total_seconds()
+        minutes, seconds = divmod(int(duration_seconds), 60)
+
+        # Tentukan status
+        status = "Normal"
+        if any(task.cancelled() for task in tasks):
+            status = "Dihentikan"
+
+        # Header pyfiglet untuk "BERHENTI"
+        f = Figlet(font='standard')
+        print(f"{Fore.CYAN}{f.renderText('SELESAI')}{Style.RESET_ALL}")
+
+        # Tampilan dengan border
+        box_width = 40
+        status_icon = "✅" if status == "Normal" else "⛔"
+        status_text = f"Status: {status} {status_icon}"
+        time_text = f"⏰ Selesai: {script_end_time.strftime('%H:%M:%S')}"
+        duration_text = f"⏳ Durasi: {minutes}m {seconds}s"
+        
+        padding_status = (box_width - 4 - len(status_text)) // 2
+        padding_status_right = box_width - 4 - len(status_text) - padding_status
+        padding_time = (box_width - 4 - len(time_text)) // 2
+        padding_time_right = box_width - 4 - len(time_text) - padding_time
+        padding_duration = (box_width - 4 - len(duration_text)) // 2
+        padding_duration_right = box_width - 4 - len(duration_text) - padding_duration
+
+        print(f"{Fore.CYAN}┌{'─' * (box_width - 2)}┐{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}│{Fore.GREEN}{' ' * padding_status}{status_text}{' ' * padding_status_right}{Fore.CYAN}│{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}├{'─' * (box_width - 2)}┤{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}│{Fore.CYAN}{' ' * padding_time}{time_text}{' ' * padding_time_right}{Fore.CYAN}│{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}├{'─' * (box_width - 2)}┤{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}│{Fore.YELLOW}{' ' * padding_duration}{duration_text}{' ' * padding_duration_right}{Fore.CYAN}│{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}└{'─' * (box_width - 2)}┘{Style.RESET_ALL}")
 
 if __name__ == "__main__":
     try:
