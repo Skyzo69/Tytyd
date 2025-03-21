@@ -141,8 +141,8 @@ async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, w
                                     else:
                                         log_message("warning", f"{nama_token}: ⚠️ Gagal menghapus pesan ke {counter[nama_token]} (Percobaan {i+1}, Status: {del_response.status})")
                                         await asyncio.sleep(1)
-                                else:
-                                    log_message("error", f"{nama_token}: ❌ Gagal menghapus pesan ke {counter[nama_token]} setelah 3 percobaan - ID: {message_id}")
+                            else:
+                                log_message("error", f"{nama_token}: ❌ Gagal menghapus pesan ke {counter[nama_token]} setelah 3 percobaan - ID: {message_id}")
 
                         elif response.status == 429:
                             retry_after = float(response.headers.get("Retry-After", 5))
@@ -184,6 +184,13 @@ async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, w
         log_message("info", f"{nama_token}: ⏹️ Tugas pengiriman pesan selesai")
 
 async def main():
+    # Inisialisasi variabel yang akan digunakan
+    pesan_list = []
+    tokens = []
+    tokens_dict = {}
+    counter = {}
+    tasks = []
+
     try:
         with open("pesan.txt", "r") as f:
             pesan_list = [line.strip() for line in f.readlines()]
@@ -238,42 +245,42 @@ async def main():
             waktu_mulai_dict[nama_token] = waktu_mulai
             waktu_stop_dict[nama_token] = waktu_stop
 
+        log_message("info", "🚀 Memulai pengiriman pesan...")
+        semaphore = asyncio.Semaphore(100)
+        total_pesan = sum(counter.values())  # Akan diperbarui dinamis
+        with tqdm(total=None, desc="📩 Progres Pengiriman") as progress_bar:
+            progress_bar.total = 0  # Akan diperbarui saat pesan terkirim
+            async with aiohttp.ClientSession() as session:
+                tasks = [
+                    asyncio.create_task(kirim_pesan(
+                        session, channel_id, nama_token, {"token": token}, pesan_list, 
+                        waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token], 
+                        progress_bar, counter, leave_on_complete, tokens_dict, semaphore
+                    ))
+                    for nama_token, token in tokens
+                ]
+                try:
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    for (nama_token, _), result in zip(tokens, results):
+                        if isinstance(result, Exception):
+                            log_message("error", f"{nama_token}: ❌ Tugas gagal dengan kesalahan - {str(result)}")
+                except KeyboardInterrupt:
+                    log_message("warning", "⏹️ Pengguna menghentikan skrip, melakukan cleanup...")
+                    for task in tasks:
+                        task.cancel()
+                    await asyncio.gather(*tasks, return_exceptions=True)
+
+            progress_bar.total = sum(counter.values())  # Set total akhir berdasarkan pesan terkirim
+
     except Exception as e:
-        log_message("error", f"🚨 Input error: {e}")
-        return
+        log_message("error", f"🚨 Error selama eksekusi: {str(e)}")
 
-    log_message("info", "🚀 Memulai pengiriman pesan...")
-    semaphore = asyncio.Semaphore(100)
-    total_pesan = sum(counter.values())  # Akan diperbarui dinamis
-    with tqdm(total=None, desc="📩 Progres Pengiriman") as progress_bar:
-        progress_bar.total = 0  # Akan diperbarui saat pesan terkirim
-        async with aiohttp.ClientSession() as session:
-            tasks = [
-                asyncio.create_task(kirim_pesan(
-                    session, channel_id, nama_token, {"token": token}, pesan_list, 
-                    waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token], 
-                    progress_bar, counter, leave_on_complete, tokens_dict, semaphore
-                ))
-                for nama_token, token in tokens
-            ]
-            try:
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-                for (nama_token, _), result in zip(tokens, results):
-                    if isinstance(result, Exception):
-                        log_message("error", f"{nama_token}: ❌ Tugas gagal dengan kesalahan - {str(result)}")
-            except KeyboardInterrupt:
-                log_message("warning", "⏹️ Pengguna menghentikan skrip, melakukan cleanup...")
-                for task in tasks:
-                    task.cancel()
-                await asyncio.gather(*tasks, return_exceptions=True)
-                raise
-
-        progress_bar.total = sum(counter.values())  # Set total akhir berdasarkan pesan terkirim
-
-    log_message("info", "🎉 Semua token telah selesai!")
-    log_message("info", "\n📊 Ringkasan Pengiriman:")
-    for nama_token, jumlah in counter.items():
-        log_message("info", f"🔹 {nama_token}: {jumlah} pesan terkirim")
+    finally:
+        # Selalu tampilkan ringkasan, baik selesai normal maupun dihentikan
+        log_message("info", "🎉 Proses selesai (normal atau dihentikan)!")
+        log_message("info", "\n📊 Ringkasan Pengiriman:")
+        for nama_token, jumlah in counter.items():
+            log_message("info", f"🔹 {nama_token}: {jumlah} pesan terkirim")
 
 if __name__ == "__main__":
     try:
