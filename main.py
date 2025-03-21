@@ -167,8 +167,6 @@ async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu
     cycle_count = 0  # Penghitung siklus
     waktu_stop_terakhir = max(waktu_stop_dict.values())
     waktu_mulai_pertama = min(waktu_mulai_dict.values())
-    timeout_duration = 61  # Timeout 10 detik
-    last_cycle_update = time.time()  # Waktu terakhir siklus diperbarui
 
     while datetime.now() < waktu_stop_terakhir:  # Berhenti hanya jika semua token selesai
         # Token yang aktif: belum selesai (waktu sekarang < waktu_stop)
@@ -205,14 +203,6 @@ async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu
                 print(f"{Fore.CYAN}┌────────────────────────────┐{Style.RESET_ALL}")
                 print(f"{Fore.CYAN}│ Siklus {cycle_count} ({persentase:.1f}% selesai)   │{Style.RESET_ALL}")
                 print(f"{Fore.CYAN}└────────────────────────────┘{Style.RESET_ALL}")
-                last_cycle_update = time.time()  # Reset waktu terakhir siklus diperbarui
-
-        # Jika tidak ada siklus yang selesai dalam 10 detik, periksa apakah semua token telah selesai
-        if time.time() - last_cycle_update >= timeout_duration:
-            if not sending_tokens:  # Jika tidak ada token yang sedang mengirim, keluar dari loop
-                print(f"{Fore.YELLOW}⏹️ Tidak ada aktivitas pengiriman dalam {timeout_duration} detik, monitor siklus berhenti.{Style.RESET_ALL}")
-                break
-            last_cycle_update = time.time()  # Reset timeout jika masih ada token yang aktif
 
         await asyncio.sleep(1)  # Polling setiap 1 detik
 
