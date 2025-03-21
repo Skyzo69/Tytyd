@@ -166,6 +166,8 @@ async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu
     """Monitor siklus pengiriman dan penghapusan pesan untuk semua token dan tampilkan pesan saat ini/estimasi pesan."""
     waktu_stop_terakhir = max(waktu_stop_dict.values())
     waktu_mulai_pertama = min(waktu_mulai_dict.values())
+    # Lebar kotak tetap
+    box_width = 30  # Lebar total kotak (termasuk border)
 
     while datetime.now() < waktu_stop_terakhir:  # Berhenti hanya jika semua token selesai
         # Token yang aktif: belum selesai (waktu sekarang < waktu_stop)
@@ -206,9 +208,23 @@ async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu
                     estimasi_pesan = int(durasi_total_detik / waktu_kirim) if waktu_kirim > 0 else 0
                     total_estimasi_pesan += estimasi_pesan
                 
-                print(f"{Fore.CYAN}┌────────────────────────────┐{Style.RESET_ALL}")
-                print(f"{Fore.CYAN}│ Pesan {total_pesan_sekarang}/{total_estimasi_pesan} ({persentase:.1f}% selesai) │{Style.RESET_ALL}")
-                print(f"{Fore.CYAN}└────────────────────────────┘{Style.RESET_ALL}")
+                # Format teks untuk pesan dan estimasi waktu
+                pesan_text = f"Pesan {total_pesan_sekarang}/{total_estimasi_pesan} ({persentase:.1f}% selesai)"
+                # Format estimasi waktu selesai menjadi YYYY-MM-DD HH:MM:SS
+                waktu_selesai_text = waktu_stop_terakhir.strftime("%Y-%m-%d %H:%M:%S")
+                
+                # Hitung padding agar teks rata tengah
+                padding_pesan = (box_width - 4 - len(pesan_text)) // 2  # -4 untuk border dan spasi
+                padding_waktu = (box_width - 4 - len(waktu_selesai_text)) // 2
+                padding_pesan_right = box_width - 4 - len(pesan_text) - padding_pesan
+                padding_waktu_right = box_width - 4 - len(waktu_selesai_text) - padding_waktu
+
+                # Tampilkan kotak dengan border lengkap
+                print(f"{Fore.CYAN}┌{'─' * (box_width - 2)}┐{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}│{' ' * padding_pesan}{pesan_text}{' ' * padding_pesan_right}│{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}├{'─' * (box_width - 2)}┤{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}│{' ' * padding_waktu}{waktu_selesai_text}{' ' * padding_waktu_right}│{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}└{'─' * (box_width - 2)}┘{Style.RESET_ALL}")
 
         await asyncio.sleep(1)  # Polling setiap 1 detik
 
@@ -276,7 +292,7 @@ async def main():
             waktu_stop_dict[nama_token] = waktu_stop
 
         print(f"{Fore.YELLOW}--- Memulai Pengiriman Pesan ---{Style.RESET_ALL}")
-        # Hitung waktu stop terakhir untuk estimasi selesai
+        # Hitung waktu stop terakhir untuk estimasi selesai dan tampilkan
         waktu_stop_terakhir = max(waktu_stop_dict.values())
         print(f"{Fore.CYAN}⏰ Estimasi skrip selesai pada: {waktu_stop_terakhir.strftime('%Y-%m-%d %H:%M:%S')}{Style.RESET_ALL}")
         semaphore = asyncio.Semaphore(100)
