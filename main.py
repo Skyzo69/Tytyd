@@ -217,7 +217,7 @@ async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu
             try:
                 await asyncio.wait_for(
                     asyncio.gather(*(cycle_completion_event[nama].wait() for nama in sending_tokens)),
-                    timeout=60  # Timeout untuk mencegah stuck
+                    timeout=10  # Timeout untuk mencegah stuck
                 )
                 cycle_count += 1  # Tambah nomor siklus
                 # Hitung persentase berdasarkan token dengan waktu_stop terakhir
