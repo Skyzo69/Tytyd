@@ -162,9 +162,8 @@ async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, w
 
         log_message(nama_token, "info", "⏹️ Tugas pengiriman pesan selesai")
 
-async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu_stop_dict):
-    """Monitor siklus pengiriman dan penghapusan pesan untuk semua token dan tampilkan persentase dengan nomor siklus."""
-    cycle_count = 0  # Penghitung siklus
+async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu_stop_dict, counter, waktu_kirim):
+    """Monitor siklus pengiriman dan penghapusan pesan untuk semua token dan tampilkan pesan saat ini/estimasi pesan."""
     waktu_stop_terakhir = max(waktu_stop_dict.values())
     waktu_mulai_pertama = min(waktu_mulai_dict.values())
 
@@ -194,14 +193,21 @@ async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu
                     cycle_completion_event[nama].clear()
 
             if any_cycle_complete:
-                cycle_count += 1  # Tambah nomor siklus
                 waktu_sekarang = datetime.now()
                 total_durasi = (waktu_stop_terakhir - waktu_mulai_pertama).total_seconds()
                 durasi_berlalu = (waktu_sekarang - waktu_mulai_pertama).total_seconds()
                 persentase = min(100, max(0, (durasi_berlalu / total_durasi) * 100)) if total_durasi > 0 else 0
+
+                # Hitung total pesan saat ini dan estimasi total pesan untuk semua token
+                total_pesan_sekarang = sum(counter[nama] for nama in sending_tokens)
+                total_estimasi_pesan = 0
+                for nama in sending_tokens:
+                    durasi_total_detik = (waktu_stop_dict[nama] - waktu_mulai_dict[nama]).total_seconds()
+                    estimasi_pesan = int(durasi_total_detik / waktu_kirim) if waktu_kirim > 0 else 0
+                    total_estimasi_pesan += estimasi_pesan
                 
                 print(f"{Fore.CYAN}┌────────────────────────────┐{Style.RESET_ALL}")
-                print(f"{Fore.CYAN}│ Siklus {cycle_count} ({persentase:.1f}% selesai)   │{Style.RESET_ALL}")
+                print(f"{Fore.CYAN}│ Pesan {total_pesan_sekarang}/{total_estimasi_pesan} ({persentase:.1f}% selesai) │{Style.RESET_ALL}")
                 print(f"{Fore.CYAN}└────────────────────────────┘{Style.RESET_ALL}")
 
         await asyncio.sleep(1)  # Polling setiap 1 detik
@@ -281,7 +287,7 @@ async def main():
                 ))
                 for nama_token, token in tokens
             ]
-            tasks.append(asyncio.create_task(monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu_stop_dict)))
+            tasks.append(asyncio.create_task(monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu_stop_dict, counter, waktu_kirim)))
 
             try:
                 results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -299,7 +305,13 @@ async def main():
 
     finally:
         print(f"{Fore.YELLOW}--- Ringkasan Pengiriman ---{Style.RESET_ALL}")
-        table_data = [[nama_token, f"{jumlah} pesan"] for nama_token, jumlah in counter.items()]
+        table_data = []
+        for nama_token, _ in tokens:
+            # Hitung estimasi pesan untuk token ini
+            durasi_total_detik = (waktu_stop_dict[nama_token] - waktu_mulai_dict[nama_token]).total_seconds()
+            estimasi_pesan = int(durasi_total_detik / waktu_kirim) if waktu_kirim > 0 else 0
+            jumlah = counter[nama_token]
+            table_data.append([nama_token, f"{jumlah}/{estimasi_pesan} pesan"])
         print(tabulate(table_data, headers=["Token", "Jumlah Pesan Terkirim"], tablefmt="grid"))
         print(f"{Fore.CYAN}=== Proses Selesai (Normal atau Dihentikan) ==={Style.RESET_ALL}")
 
