@@ -358,11 +358,13 @@ async def main():
         if any(task.cancelled() for task in tasks):
             status = "Dihentikan"
 
-        # Header pyfiglet untuk "BERHENTI"
-        f = Figlet(font='standard')
-        print(f"{Fore.CYAN}{f.renderText('SELESAI')}{Style.RESET_ALL}")
+        # Animasi sederhana (opsional)
+        for _ in range(3):
+            print(f"{Fore.CYAN}Menyiapkan ringkasan akhir{'.' * (_ % 4)}{' ' * (3 - (_ % 4))}{Style.RESET_ALL}", end="\r")
+            time.sleep(0.5)
+        print()
 
-        # Tampilan dengan border
+        # Tampilan border dengan ikon
         box_width = 40
         status_icon = "✅" if status == "Normal" else "⛔"
         status_text = f"Status: {status} {status_icon}"
@@ -376,13 +378,15 @@ async def main():
         padding_duration = (box_width - 4 - len(duration_text)) // 2
         padding_duration_right = box_width - 4 - len(duration_text) - padding_duration
 
-        print(f"{Fore.CYAN}┌{'─' * (box_width - 2)}┐{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}│{Fore.GREEN}{' ' * padding_status}{status_text}{' ' * padding_status_right}{Fore.CYAN}│{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}├{'─' * (box_width - 2)}┤{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}│{Fore.CYAN}{' ' * padding_time}{time_text}{' ' * padding_time_right}{Fore.CYAN}│{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}├{'─' * (box_width - 2)}┤{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}│{Fore.YELLOW}{' ' * padding_duration}{duration_text}{' ' * padding_duration_right}{Fore.CYAN}│{Style.RESET_ALL}")
-        print(f"{Fore.CYAN}└{'─' * (box_width - 2)}┘{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}╔══════════════════════════════════════╗{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}║{Fore.GREEN} 🎉 Proses Selesai!                {Fore.CYAN}║{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}╠══════════════════════════════════════╣{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}║{Fore.GREEN}{' ' * padding_status}{status_text}{' ' * padding_status_right}{Fore.CYAN}║{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}╠══════════════════════════════════════╣{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}║{Fore.CYAN}{' ' * padding_time}{time_text}{' ' * padding_time_right}{Fore.CYAN}║{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}╠══════════════════════════════════════╣{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}║{Fore.YELLOW}{' ' * padding_duration}{duration_text}{' ' * padding_duration_right}{Fore.CYAN}║{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}╚══════════════════════════════════════╝{Style.RESET_ALL}")
 
 if __name__ == "__main__":
     try:
