@@ -195,9 +195,6 @@ async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu
     # Tentukan waktu stop terakhir dari semua token
     waktu_stop_terakhir = max(waktu_stop_dict.values())
     waktu_mulai_pertama = min(waktu_mulai_dict.values())
-    
-    # Dictionary untuk melacak siklus terakhir yang diselesaikan oleh setiap token
-    last_completed_cycle = {nama: -1 for nama, _ in tokens}
 
     while datetime.now() < waktu_stop_terakhir:  # Berhenti hanya jika semua token selesai
         # Token yang aktif: belum selesai (waktu sekarang < waktu_stop)
@@ -216,33 +213,13 @@ async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu
             print(f"{Fore.YELLOW}⏹️ Semua tugas pengiriman selesai, monitor siklus berhenti.{Style.RESET_ALL}")
             break
 
-        if sending_tokens:  # Hanya periksa event jika ada token yang sedang mengirim
-            # Periksa setiap token secara individu
-            for nama in sending_tokens:
-                try:
-                    # Tunggu event untuk token ini dengan timeout pendek
-                    await asyncio.wait_for(
-                        cycle_completion_event[nama].wait(),
-                        timeout=5  # Timeout lebih pendek per token
-                    )
-                    # Jika event diset, token ini telah menyelesaikan siklus
-                    if last_completed_cycle[nama] < cycle_count:
-                        last_completed_cycle[nama] = cycle_count
-                        log_message(nama, "info", f"✅ Selesai siklus {cycle_count}")
-                        cycle_completion_event[nama].clear()
-
-                except asyncio.TimeoutError:
-                    log_message(nama, "warning", f"⏳ Menunggu siklus selesai (Siklus {cycle_count}) - kemungkinan delay pada pengiriman atau penghapusan pesan")
-                    continue
-
-            # Periksa apakah semua token aktif telah menyelesaikan siklus ini
-            all_completed = all(
-                last_completed_cycle[nama] >= cycle_count
-                for nama in sending_tokens
-            )
-
-            if all_completed:
-                cycle_count += 1  # Tambah nomor siklus hanya jika semua token selesai
+        if sending_tokens:  # Hanya tunggu event jika ada token yang sedang mengirim
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*(cycle_completion_event[nama].wait() for nama in sending_tokens)),
+                    timeout=10  # Timeout untuk mencegah stuck
+                )
+                cycle_count += 1  # Tambah nomor siklus
                 # Hitung persentase berdasarkan token dengan waktu_stop terakhir
                 waktu_sekarang = datetime.now()
                 total_durasi = (waktu_stop_terakhir - waktu_mulai_pertama).total_seconds()
@@ -252,6 +229,11 @@ async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu
                 print(f"{Fore.CYAN}┌────────────────────────────┐{Style.RESET_ALL}")
                 print(f"{Fore.CYAN}│ Siklus {cycle_count} ({persentase:.1f}% selesai)   │{Style.RESET_ALL}")
                 print(f"{Fore.CYAN}└────────────────────────────┘{Style.RESET_ALL}")
+                for nama in sending_tokens:
+                    cycle_completion_event[nama].clear()
+            except asyncio.TimeoutError:
+                print(f"{Fore.YELLOW}⚠️ Timeout di monitor siklus, memeriksa ulang token aktif...{Style.RESET_ALL}")
+                continue
 
         await asyncio.sleep(1)
 
