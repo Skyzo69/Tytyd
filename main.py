@@ -23,8 +23,6 @@ def log_message(nama_token, level, message):
     formatted_message = f"[{nama_token}] {message}"
     logging.log(getattr(logging, level.upper()), formatted_message)
     print(f"{color}{formatted_message}{Style.RESET_ALL}")
-    # Tambahkan baris baru setelah setiap pesan untuk memisahkan dari progress bar
-    print()
 
 async def cek_token(session, nama_token, token):
     """Mengecek apakah token valid dengan mencoba request ke API Discord."""
@@ -38,6 +36,7 @@ async def cek_token(session, nama_token, token):
             elif response.status == 429:
                 retry_after = float(response.headers.get("Retry-After", 5))
                 log_message(nama_token, "warning", f"⏳ Rate limit saat cek token, menunggu {retry_after} detik")
+                await asyncio.sleep(retry_after)
                 return await cek_token(session, nama_token, token)
             else:
                 log_message(nama_token, "error", f"❌ Token tidak valid (Status: {response.status})")
@@ -92,7 +91,7 @@ async def perbarui_token(nama_token, tokens_dict):
         log_message(nama_token, "error", f"❌ Gagal memperbarui token - {str(e)}")
         return None
 
-async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, progress_bar, counter, leave_on_complete, tokens_dict, semaphore, total_target):
+async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, progress_bar, counter, leave_on_complete, tokens_dict, semaphore):
     """Mengirim dan menghapus pesan secara berurutan sesuai pesan.txt lalu loop ke awal"""
     async with semaphore:
         headers = {"Authorization": token_dict["token"], "Content-Type": "application/json"}
@@ -124,10 +123,6 @@ async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, w
                             counter[nama_token] += 1
                             log_message(nama_token, "info", f"📩 Pesan ke-{counter[nama_token]} terkirim (ID: {message_id}) - {pesan}")
                             progress_bar.update(1)
-                            # Update deskripsi progress bar dengan pesan/target dan persentase
-                            current_total = sum(counter.values())
-                            percentage = (current_total / total_target * 100) if total_target > 0 else 0
-                            progress_bar.set_description(f"📩 Progres Pengiriman: {current_total}/{total_target} pesan ({percentage:.1f}%)")
 
                             await asyncio.sleep(waktu_hapus)
 
@@ -172,7 +167,7 @@ async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, w
 
                 except aiohttp.ClientConnectionError as e:
                     log_message(nama_token, "error", f"❌ Koneksi gagal - {str(e)}, membuat ulang session")
-                    return await kirim_pesan(aiohttp.ClientSession(), channel_id, nama_token, token_dict, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, progress_bar, counter, leave_on_complete, tokens_dict, semaphore, total_target)
+                    return await kirim_pesan(aiohttp.ClientSession(), channel_id, nama_token, token_dict, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, progress_bar, counter, leave_on_complete, tokens_dict, semaphore)
                 except aiohttp.ClientError as e:
                     log_message(nama_token, "error", f"❌ Kesalahan jaringan - {str(e)}")
                     await asyncio.sleep(1)
@@ -227,14 +222,6 @@ async def main():
         if waktu_hapus < 0.01 or waktu_kirim < 0.01:
             raise ValueError("⚠️ Waktu minimal adalah 0.01 detik!")
 
-        # Tambahkan input untuk target total pesan
-        total_target_input = input(f"{Fore.CYAN}🎯 Masukkan target total pesan yang akan dikirim: {Style.RESET_ALL}").strip()
-        if not total_target_input or not total_target_input.isdigit():
-            raise ValueError("⚠️ Target total pesan harus angka dan tidak boleh kosong!")
-        total_target = int(total_target_input)
-        if total_target <= 0:
-            raise ValueError("⚠️ Target total pesan harus lebih dari 0!")
-
         leave_choice = input(f"{Fore.CYAN}🚪 Ingin leave thread setelah selesai untuk setiap token? (y/n): {Style.RESET_ALL}").strip().lower()
         if not leave_choice:
             raise ValueError("⚠️ Pilihan leave thread tidak boleh kosong!")
@@ -260,18 +247,15 @@ async def main():
             waktu_stop_dict[nama_token] = waktu_stop
 
         print(f"{Fore.YELLOW}--- Memulai Pengiriman Pesan ---{Style.RESET_ALL}")
-        print()  # Baris kosong sebelum progress bar
         semaphore = asyncio.Semaphore(100)
-        with tqdm(total=total_target, desc="📩 Progres Pengiriman", unit="pesan") as progress_bar:
-            progress_bar.total = total_target
-            # Inisialisasi deskripsi awal
-            progress_bar.set_description(f"📩 Progres Pengiriman: 0/{total_target} pesan (0.0%)")
+        with tqdm(total=None, desc="📩 Progres Pengiriman", unit="pesan") as progress_bar:
+            progress_bar.total = 0
             async with aiohttp.ClientSession() as session:
                 tasks = [
                     asyncio.create_task(kirim_pesan(
                         session, channel_id, nama_token, {"token": token}, pesan_list,
                         waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token],
-                        progress_bar, counter, leave_on_complete, tokens_dict, semaphore, total_target
+                        progress_bar, counter, leave_on_complete, tokens_dict, semaphore
                     ))
                     for nama_token, token in tokens
                 ]
@@ -282,14 +266,14 @@ async def main():
                             log_message(nama_token, "error", f"❌ Tugas gagal - {str(result)}")
                 except KeyboardInterrupt:
                     print(f"{Fore.YELLOW}⏹️ Pengguna menghentikan skrip, melakukan cleanup...{Style.RESET_ALL}")
-                    print()  # Baris kosong setelah pesan
                     for task in tasks:
                         task.cancel()
                     await asyncio.gather(*tasks, return_exceptions=True)
 
+            progress_bar.total = sum(counter.values())
+
     except Exception as e:
         print(f"{Fore.RED}🚨 Error selama eksekusi: {str(e)}{Style.RESET_ALL}")
-        print()  # Baris kosong setelah pesan error
 
     finally:
         print(f"{Fore.YELLOW}--- Ringkasan Pengiriman ---{Style.RESET_ALL}")
