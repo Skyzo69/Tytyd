@@ -339,8 +339,8 @@ async def main():
             estimasi_pesan = int(durasi_total_detik / waktu_kirim) if waktu_kirim > 0 else 0
             jumlah = counter[nama_token]
             # Format dengan warna
-            colored_token = f"{Fore.GREEN}{nama_token}{Style.RESET_ALL}"
-            colored_pesan = f"{Fore.BLUE}{jumlah}/{estimasi_pesan} pesan{Style.RESET_ALL}"
+            colored_token = f"{Fore.BLUE}{nama_token}{Style.RESET_ALL}"
+            colored_pesan = f"{Fore.GREEN}{jumlah}/{estimasi_pesan} pesan{Style.RESET_ALL}"
             table_data.append([colored_token, colored_pesan])
         print(tabulate(table_data, headers=[
             f"{Fore.CYAN}Token{Style.RESET_ALL}",
