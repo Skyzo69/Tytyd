@@ -73,27 +73,7 @@ async def leave_thread(session, channel_id, nama_token, token):
     except aiohttp.ClientError as e:
         log_message(nama_token, "error", f"❌ Gagal meninggalkan thread channel {channel_id} - {str(e)}")
 
-async def perbarui_token(nama_token, tokens_dict):
-    """Memperbarui token dari token.txt jika tidak valid."""
-    try:
-        with open("token.txt", "r") as f:
-            for line in f.readlines():
-                if ":" in line:
-                    nama, token_baru = line.strip().split(":", 1)
-                    if nama == nama_token:
-                        if token_baru != tokens_dict[nama_token]:
-                            log_message(nama_token, "info", "🔄 Token diperbarui dari token.txt")
-                            return token_baru
-                        else:
-                            log_message(nama_token, "warning", "⚠️ Token di token.txt sama dengan yang lama")
-                            return None
-        log_message(nama_token, "error", "❌ Tidak ditemukan token baru di token.txt")
-        return None
-    except Exception as e:
-        log_message(nama_token, "error", f"❌ Gagal memperbarui token - {str(e)}")
-        return None
-
-async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, counter, leave_on_complete, tokens_dict, semaphore, cycle_completion_event):
+async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, counter, leave_on_complete, semaphore, cycle_completion_event):
     """Mengirim dan menghapus pesan secara berurutan sesuai pesan.txt lalu loop ke awal"""
     async with semaphore:
         headers = {"Authorization": token_dict["token"], "Content-Type": "application/json"}
@@ -155,15 +135,8 @@ async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, w
                             log_message(nama_token, "warning", f"⏳ Rate limit saat kirim, menunggu {retry_after} detik")
                             await asyncio.sleep(retry_after)
                         elif response.status == 401:
-                            log_message(nama_token, "error", "❌ Token tidak valid (Status: 401), mencoba perbarui...")
-                            token_baru = await perbarui_token(nama_token, tokens_dict)
-                            if token_baru:
-                                token_dict["token"] = token_baru
-                                headers["Authorization"] = token_baru
-                                log_message(nama_token, "info", "🔄 Melanjutkan dengan token baru")
-                            else:
-                                log_message(nama_token, "error", "❌ Tidak bisa melanjutkan, tugas berhenti")
-                                return
+                            log_message(nama_token, "error", "❌ Token tidak valid (Status: 401), tugas berhenti")
+                            return
                         else:
                             log_message(nama_token, "error", f"❌ Gagal mengirim pesan (Status: {response.status})")
                             await asyncio.sleep(5)
@@ -172,7 +145,7 @@ async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, w
 
                 except aiohttp.ClientConnectionError as e:
                     log_message(nama_token, "error", f"❌ Koneksi gagal - {str(e)}, membuat ulang session")
-                    return await kirim_pesan(aiohttp.ClientSession(), channel_id, nama_token, token_dict, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, counter, leave_on_complete, tokens_dict, semaphore, cycle_completion_event)
+                    return await kirim_pesan(aiohttp.ClientSession(), channel_id, nama_token, token_dict, pesan_list, waktu_hapus, waktu_kirim, waktu_mulai, waktu_stop, counter, leave_on_complete, semaphore, cycle_completion_event)
                 except aiohttp.ClientError as e:
                     log_message(nama_token, "error", f"❌ Kesalahan jaringan - {str(e)}")
                     await asyncio.sleep(1)
@@ -192,7 +165,6 @@ async def kirim_pesan(session, channel_id, nama_token, token_dict, pesan_list, w
 async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu_stop_dict):
     """Monitor siklus pengiriman dan penghapusan pesan untuk semua token dan tampilkan persentase dengan nomor siklus."""
     cycle_count = 0  # Penghitung siklus
-    # Tentukan waktu stop terakhir dari semua token
     waktu_stop_terakhir = max(waktu_stop_dict.values())
     waktu_mulai_pertama = min(waktu_mulai_dict.values())
 
@@ -213,14 +185,17 @@ async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu
             print(f"{Fore.YELLOW}⏹️ Semua tugas pengiriman selesai, monitor siklus berhenti.{Style.RESET_ALL}")
             break
 
-        if sending_tokens:  # Hanya tunggu event jika ada token yang sedang mengirim
-            try:
-                await asyncio.wait_for(
-                    asyncio.gather(*(cycle_completion_event[nama].wait() for nama in sending_tokens)),
-                    timeout=10  # Timeout untuk mencegah stuck
-                )
+        if sending_tokens:
+            # Cek apakah ada siklus yang selesai tanpa menunggu timeout
+            all_cycles_complete = True
+            for nama in sending_tokens:
+                if cycle_completion_event[nama].is_set():
+                    cycle_completion_event[nama].clear()
+                else:
+                    all_cycles_complete = False
+
+            if all_cycles_complete:
                 cycle_count += 1  # Tambah nomor siklus
-                # Hitung persentase berdasarkan token dengan waktu_stop terakhir
                 waktu_sekarang = datetime.now()
                 total_durasi = (waktu_stop_terakhir - waktu_mulai_pertama).total_seconds()
                 durasi_berlalu = (waktu_sekarang - waktu_mulai_pertama).total_seconds()
@@ -229,19 +204,13 @@ async def monitor_cycles(tokens, cycle_completion_event, waktu_mulai_dict, waktu
                 print(f"{Fore.CYAN}┌────────────────────────────┐{Style.RESET_ALL}")
                 print(f"{Fore.CYAN}│ Siklus {cycle_count} ({persentase:.1f}% selesai)   │{Style.RESET_ALL}")
                 print(f"{Fore.CYAN}└────────────────────────────┘{Style.RESET_ALL}")
-                for nama in sending_tokens:
-                    cycle_completion_event[nama].clear()
-            except asyncio.TimeoutError:
-                print(f"{Fore.YELLOW}⚠️ Timeout di monitor siklus, memeriksa ulang token aktif...{Style.RESET_ALL}")
-                continue
 
-        await asyncio.sleep(1)
+        await asyncio.sleep(1)  # Polling setiap 1 detik
 
 async def main():
     global waktu_mulai_dict, waktu_stop_dict  # Untuk akses di monitor_cycles
     pesan_list = []
     tokens = []
-    tokens_dict = {}
     counter = {}
     tasks = []
     cycle_completion_event = {}
@@ -263,7 +232,6 @@ async def main():
             print(f"{Fore.RED}🚨 Beberapa token tidak valid. Perbaiki token.txt dan coba lagi.{Style.RESET_ALL}")
             return
 
-        tokens_dict = {nama_token: token for nama_token, token in tokens}
         channel_id = input(f"{Fore.CYAN}🔹 Masukkan ID channel: {Style.RESET_ALL}").strip()
         if not channel_id or not channel_id.isdigit():
             raise ValueError("⚠️ Channel ID harus angka dan tidak boleh kosong!")
@@ -310,7 +278,7 @@ async def main():
                 asyncio.create_task(kirim_pesan(
                     session, channel_id, nama_token, {"token": token}, pesan_list,
                     waktu_hapus, waktu_kirim, waktu_mulai_dict[nama_token], waktu_stop_dict[nama_token],
-                    counter, leave_on_complete, tokens_dict, semaphore, cycle_completion_event
+                    counter, leave_on_complete, semaphore, cycle_completion_event
                 ))
                 for nama_token, token in tokens
             ]
