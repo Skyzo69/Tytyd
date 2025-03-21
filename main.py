@@ -231,6 +231,8 @@ async def main():
         waktu_stop_dict = {}
         counter = {nama_token: 0 for nama_token, _ in tokens}
 
+        # Estimate total messages for progress bar
+        estimated_totals = {}
         for nama_token, _ in tokens:
             waktu_mulai_menit_input = input(f"{Fore.CYAN}⏳ Masukkan waktu mulai untuk {nama_token} (menit dari sekarang): {Style.RESET_ALL}").strip()
             waktu_berhenti_menit_input = input(f"{Fore.CYAN}⏰ Masukkan waktu berhenti untuk {nama_token} (menit setelah mulai): {Style.RESET_ALL}").strip()
@@ -246,10 +248,20 @@ async def main():
             waktu_mulai_dict[nama_token] = waktu_mulai
             waktu_stop_dict[nama_token] = waktu_stop
 
+            # Estimate the number of messages for this token
+            duration_seconds = (waktu_stop - waktu_mulai).total_seconds()
+            if duration_seconds > 0:
+                estimated_messages = int(duration_seconds / waktu_kirim)
+            else:
+                estimated_messages = 0
+            estimated_totals[nama_token] = estimated_messages
+
+        # Calculate the total estimated messages for the progress bar
+        total_estimated_messages = sum(estimated_totals.values())
+
         print(f"{Fore.YELLOW}--- Memulai Pengiriman Pesan ---{Style.RESET_ALL}")
         semaphore = asyncio.Semaphore(100)
-        with tqdm(total=None, desc="📩 Progres Pengiriman", unit="pesan") as progress_bar:
-            progress_bar.total = 0
+        with tqdm(total=total_estimated_messages, desc="📩 Progres Pengiriman", unit="pesan") as progress_bar:
             async with aiohttp.ClientSession() as session:
                 tasks = [
                     asyncio.create_task(kirim_pesan(
@@ -270,7 +282,10 @@ async def main():
                         task.cancel()
                     await asyncio.gather(*tasks, return_exceptions=True)
 
-            progress_bar.total = sum(counter.values())
+            # Update the progress bar total to the actual number of messages sent
+            actual_total = sum(counter.values())
+            progress_bar.total = actual_total
+            progress_bar.refresh()
 
     except Exception as e:
         print(f"{Fore.RED}🚨 Error selama eksekusi: {str(e)}{Style.RESET_ALL}")
