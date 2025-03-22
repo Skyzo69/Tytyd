@@ -357,7 +357,7 @@ async def main():
         # Tampilkan waktu berhenti setiap token dengan format YYYY-MM-DD HH:MM
         print(f"{Fore.YELLOW}⏰ Berhenti Pengiriman Pesan Pada:{Style.RESET_ALL}")
         for nama_token, waktu_stop in waktu_stop_dict.items():
-            formatted_waktu_stop = waktu_stop.strftime("%Y-%m-%d %H:%M")
+            formatted_waktu_stop = waktu_stop.strftime("%Y-%m-%d %H:%M:%S")
             print(f"{Fore.YELLOW}   {nama_token}: {formatted_waktu_stop}{Style.RESET_ALL}")
         print()  # Baris kosong untuk pemisah
 
