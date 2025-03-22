@@ -300,6 +300,13 @@ async def main():
             waktu_stop_dict[nama_token] = waktu_stop
 
         print(f"{Fore.YELLOW}--- Memulai Pengiriman Pesan ---{Style.RESET_ALL}")
+        # Tampilkan waktu mulai setiap token dengan format MM-DD HH:MM
+        print(f"{Fore.MAGENTA}⏰ Jadwal Mulai Pengiriman Pesan:{Style.RESET_ALL}")
+        for nama_token, waktu_mulai in waktu_mulai_dict.items():
+            formatted_waktu_mulai = waktu_mulai.strftime("%m-%d %H:%M")
+            print(f"{Fore.MAGENTA}   {nama_token}: {formatted_waktu_mulai}{Style.RESET_ALL}")
+        print()  # Baris kosong untuk pemisah
+
         # Hitung waktu stop terakhir untuk estimasi selesai dan tampilkan
         waktu_stop_terakhir = max(waktu_stop_dict.values())
         print(f"{Fore.MAGENTA}⏰ Estimasi skrip selesai pada: {waktu_stop_terakhir.strftime('%Y-%m-%d %H:%M:%S')}{Style.RESET_ALL}")
@@ -346,6 +353,13 @@ async def main():
             f"{Fore.CYAN}Token{Style.RESET_ALL}",
             f"{Fore.CYAN}Jumlah Pesan Terkirim{Style.RESET_ALL}"
         ], tablefmt="grid"))
+
+        # Tampilkan waktu berhenti setiap token dengan format MM-DD HH:MM
+        print(f"{Fore.MAGENTA}⏰ Jadwal Berhenti Pengiriman Pesan:{Style.RESET_ALL}")
+        for nama_token, waktu_stop in waktu_stop_dict.items():
+            formatted_waktu_stop = waktu_stop.strftime("%m-%d %H:%M")
+            print(f"{Fore.MAGENTA}   {nama_token}: {formatted_waktu_stop}{Style.RESET_ALL}")
+        print()  # Baris kosong untuk pemisah
 
         # Hitung waktu selesai dan durasi
         script_end_time = datetime.now()
